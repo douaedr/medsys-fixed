@@ -68,6 +68,15 @@ export const patientApi = {
   annulerRdv: (id) => PATIENT_API.put(`/patient/me/rdv/${id}/annuler`),
 }
 
+export const directeurApi = {
+  stats: () => PATIENT_API.get('/directeur/stats'),
+  patients: (params) => PATIENT_API.get('/directeur/patients', { params }),
+  dossier: (id) => PATIENT_API.get(`/directeur/patients/${id}/dossier`),
+  exportPdf: (id) => PATIENT_API.get(`/directeur/patients/${id}/dossier/pdf`, { responseType: 'blob' }),
+  medecins: () => PATIENT_API.get('/directeur/medecins'),
+  rdv: (params) => PATIENT_API.get('/directeur/rdv', { params }),
+}
+
 export const adminApi = {
   createPersonnel: (data) => ADMIN_API.post('/personnel', data),
   listUsers: () => ADMIN_API.get('/users'),

@@ -37,14 +37,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         try {
             if (jwtService.isTokenValid(token)) {
-                String cin = jwtService.extractCin(token);
+                String role = jwtService.extractRole(token);
+                String subject = jwtService.extractCin(token);
                 Long patientId = jwtService.extractPatientId(token);
 
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(
-                                cin,
+                                subject,
                                 null,
-                                List.of(new SimpleGrantedAuthority("ROLE_PATIENT"))
+                                List.of(new SimpleGrantedAuthority("ROLE_" + role))
                         );
                 authToken.setDetails(patientId);
                 SecurityContextHolder.getContext().setAuthentication(authToken);

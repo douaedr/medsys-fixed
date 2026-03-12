@@ -45,6 +45,22 @@ public class RdvProxyService {
     }
 
     /**
+     * Récupère tous les rendez-vous depuis le ms-rdv (vue directeur).
+     */
+    public List<RendezVousDTO> getAllRdv() {
+        if (msRdvUrl == null || msRdvUrl.isBlank()) return List.of();
+        try {
+            String url = msRdvUrl + "/api/v1/rdv";
+            ResponseEntity<List<RendezVousDTO>> response = restTemplate.exchange(
+                url, HttpMethod.GET, null, new ParameterizedTypeReference<>() {});
+            return response.getBody() != null ? response.getBody() : List.of();
+        } catch (Exception e) {
+            log.warn("Impossible de joindre ms-rdv (getAllRdv): {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    /**
      * Annule un rendez-vous via le ms-rdv.
      */
     public boolean annulerRdv(Long rdvId, Long patientId) {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { patientApi, adminApi } from '../api/api'
+import { patientApi, adminApi, directeurApi } from '../api/api'
 
 // ── Navbar partagée ─────────────────────────────────────────────────────────
 function Navbar({ role, notifCount = 0 }) {
@@ -1128,6 +1128,569 @@ export function AdminDashboard() {
             </form>
           </div>
         )}
+        <div style={{ height: 40 }} />
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DIRECTEUR DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── KPI Card ──────────────────────────────────────────────────────────────
+function KpiCard({ icon, label, value, sub, color, onClick }) {
+  return (
+    <div className="card" style={{ padding: 20, cursor: onClick ? 'pointer' : 'default', borderLeft: `4px solid ${color}` }} onClick={onClick}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: color + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>{icon}</div>
+        <div>
+          <div style={{ fontSize: 24, fontFamily: 'Syne', fontWeight: 800, lineHeight: 1 }}>{value ?? '…'}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{label}</div>
+          {sub && <div style={{ fontSize: 11, color: 'var(--gray)' }}>{sub}</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Bar chart texte ────────────────────────────────────────────────────────
+function BarChart({ data, keyLabel, keyValue, color, title }) {
+  if (!data?.length) return <div style={{ color: 'var(--gray)', fontSize: 13 }}>Aucune donnée</div>
+  const max = Math.max(...data.map(d => d[keyValue]))
+  return (
+    <div>
+      {title && <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>{title}</div>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {data.map((d, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 90, fontSize: 11, color: '#374151', textAlign: 'right', flexShrink: 0 }}>{d[keyLabel]}</div>
+            <div style={{ flex: 1, background: '#f3f4f6', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ height: 20, background: color, borderRadius: 4, width: `${(d[keyValue] / max) * 100}%`, minWidth: 4, display: 'flex', alignItems: 'center', paddingLeft: 6 }}>
+                {d[keyValue] > 0 && <span style={{ fontSize: 10, color: 'white', fontWeight: 700 }}>{d[keyValue]}</span>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Section Stats ─────────────────────────────────────────────────────────
+function StatsSection({ stats }) {
+  if (!stats) return <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* KPIs ligne 1 — Patients */}
+      <div>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: 'var(--gray)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>Patients</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+          <KpiCard icon="👥" label="Total patients" value={stats.totalPatients} color="#2563eb" />
+          <KpiCard icon="📅" label="Nouveaux ce mois" value={stats.nouveauxCeMois} color="#059669" />
+          <KpiCard icon="♂️" label="Hommes" value={stats.masculins} sub={stats.totalPatients ? `${((stats.masculins/stats.totalPatients)*100).toFixed(0)}%` : ''} color="#3b82f6" />
+          <KpiCard icon="♀️" label="Femmes" value={stats.feminins} sub={stats.totalPatients ? `${((stats.feminins/stats.totalPatients)*100).toFixed(0)}%` : ''} color="#ec4899" />
+        </div>
+      </div>
+      {/* KPIs ligne 2 — Médical */}
+      <div>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: 'var(--gray)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>Activité médicale</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+          <KpiCard icon="👨‍⚕️" label="Médecins" value={stats.totalMedecins} color="#7c3aed" />
+          <KpiCard icon="📁" label="Dossiers" value={stats.totalDossiers} color="#0891b2" />
+          <KpiCard icon="🩺" label="Consultations" value={stats.totalConsultations} color="#0d9488" />
+          <KpiCard icon="💊" label="Ordonnances" value={stats.totalOrdonnances} color="#16a34a" />
+          <KpiCard icon="🩻" label="Radiologies" value={stats.totalRadiologies} color="#9333ea" />
+          <KpiCard icon="🏥" label="Hospitalisations" value={stats.totalHospitalisations} color="#dc2626" />
+        </div>
+      </div>
+      {/* KPIs ligne 3 — Analyses */}
+      <div>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: 'var(--gray)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>Analyses laboratoire</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+          <KpiCard icon="🧪" label="Total analyses" value={stats.totalAnalyses} color="#d97706" />
+          <KpiCard icon="⏳" label="En attente" value={stats.analysesEnAttente} color="#f59e0b" />
+          <KpiCard icon="🔄" label="En cours" value={stats.analysesEnCours} color="#3b82f6" />
+          <KpiCard icon="✅" label="Terminées" value={stats.analysesTerminees} color="#10b981" />
+        </div>
+      </div>
+      {/* KPIs ligne 4 — Numérique */}
+      <div>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 14, color: 'var(--gray)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>Portail numérique</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+          <KpiCard icon="📂" label="Documents uploadés" value={stats.totalDocumentsUploades} color="#6366f1" />
+          <KpiCard icon="💬" label="Messages échangés" value={stats.totalMessages} color="#8b5cf6" />
+        </div>
+      </div>
+      {/* Graphiques */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 20 }}>
+        <div className="card" style={{ padding: 20 }}>
+          <BarChart data={stats.patientsParVille} keyLabel="ville" keyValue="count" color="#2563eb" title="🏙️ Patients par ville (top 8)" />
+        </div>
+        <div className="card" style={{ padding: 20 }}>
+          <BarChart data={stats.patientsParGroupeSanguin} keyLabel="groupe" keyValue="count" color="#dc2626" title="🩸 Répartition groupes sanguins" />
+        </div>
+        <div className="card" style={{ padding: 20 }}>
+          <BarChart data={stats.patientsParMois} keyLabel="mois" keyValue="count" color="#059669" title="📈 Nouveaux patients (6 mois)" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Section Patients (directeur) ───────────────────────────────────────────
+function DirecteurPatientsSection() {
+  const [patients, setPatients] = useState([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [selectedPatient, setSelectedPatient] = useState(null)
+  const [dossier, setDossier] = useState(null)
+  const [loadingDossier, setLoadingDossier] = useState(false)
+  const [error, setError] = useState('')
+
+  const load = async (p = 0, q = '') => {
+    setLoading(true); setError('')
+    try {
+      const r = await directeurApi.patients({ page: p, size: 15, q })
+      setPatients(r.data.content || [])
+      setTotal(r.data.totalElements || 0)
+      setTotalPages(r.data.totalPages || 0)
+      setPage(p)
+    } catch { setError('Impossible de charger les patients.') }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load(0, '') }, [])
+
+  const openDossier = async (patient) => {
+    setSelectedPatient(patient); setDossier(null); setLoadingDossier(true)
+    try { const r = await directeurApi.dossier(patient.id); setDossier(r.data) }
+    catch { setError('Impossible de charger le dossier.') }
+    finally { setLoadingDossier(false) }
+  }
+
+  const downloadPdf = async (id, cin) => {
+    try {
+      const r = await directeurApi.exportPdf(id)
+      const url = URL.createObjectURL(r.data)
+      const a = document.createElement('a'); a.href = url; a.download = `dossier-${cin}.pdf`
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    } catch { setError('Erreur export PDF.') }
+  }
+
+  if (selectedPatient) return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18 }}>
+          📁 {selectedPatient.prenom} {selectedPatient.nom}
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-outline" onClick={() => downloadPdf(selectedPatient.id, selectedPatient.cin)} style={{ fontSize: 12 }}>⬇️ PDF</button>
+          <button className="btn btn-outline" onClick={() => { setSelectedPatient(null); setDossier(null) }}>← Retour</button>
+        </div>
+      </div>
+      <div className="card" style={{ padding: 16, marginBottom: 16, background: '#f0f9ff', border: '1px solid #bae6fd', fontSize: 13 }}>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+          {[['CIN', selectedPatient.cin], ['Né(e) le', selectedPatient.dateNaissance ? new Date(selectedPatient.dateNaissance).toLocaleDateString('fr-FR') : '—'],
+            ['Sexe', selectedPatient.sexe], ['Gr. sanguin', selectedPatient.groupeSanguin?.replace('_', ' ')],
+            ['Tél.', selectedPatient.telephone || '—'], ['Ville', selectedPatient.ville || '—'],
+            ['Mutuelle', selectedPatient.mutuelle || '—'], ['N° Dossier', selectedPatient.numeroDossier || '—']
+          ].map(([k, v]) => (
+            <div key={k}><span style={{ color: 'var(--gray)' }}>{k} : </span><strong>{v}</strong></div>
+          ))}
+        </div>
+      </div>
+      {loadingDossier ? <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+        : <DossierMedical dossier={dossier} />}
+    </div>
+  )
+
+  return (
+    <div>
+      {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>⚠️ {error}</div>}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <input className="form-input" value={search} onChange={e => setSearch(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && load(0, search)}
+          placeholder="Rechercher nom, prénom, CIN…" style={{ flex: 1 }} />
+        <button className="btn btn-primary" onClick={() => load(0, search)}>🔍</button>
+        {search && <button className="btn btn-outline" onClick={() => { setSearch(''); load(0, '') }}>✕</button>}
+        <span style={{ padding: '8px 14px', fontSize: 13, color: 'var(--gray)', alignSelf: 'center' }}>{total} patient{total !== 1 ? 's' : ''}</span>
+      </div>
+      {loading ? <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+      : patients.length === 0 ? <EmptyState icon="👥" label="Aucun patient trouvé" />
+      : (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '2px solid var(--border)' }}>
+                {['Patient', 'CIN', 'Naissance', 'Groupe', 'Ville', 'N° Dossier', ''].map(h => (
+                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, color: 'var(--gray)', fontWeight: 600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {patients.map((p, i) => (
+                <tr key={p.id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'white' : '#fafafa' }}>
+                  <td style={{ padding: '10px 14px', fontWeight: 600 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
+                        {p.prenom?.[0]}{p.nom?.[0]}
+                      </div>
+                      {p.prenom} {p.nom}
+                    </div>
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>{p.cin}</td>
+                  <td style={{ padding: '10px 14px' }}>{p.dateNaissance ? new Date(p.dateNaissance).toLocaleDateString('fr-FR') : '—'}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <span style={{ background: '#fee2e2', color: '#991b1b', fontSize: 10, borderRadius: 6, padding: '2px 7px', fontWeight: 600 }}>
+                      {p.groupeSanguin?.replace('_', ' ') || '—'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>{p.ville || '—'}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <span style={{ background: '#d1fae5', color: '#065f46', fontSize: 11, borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>{p.numeroDossier || '—'}</span>
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button className="btn btn-primary" onClick={() => openDossier(p)} style={{ padding: '4px 10px', fontSize: 11 }}>📁 Dossier</button>
+                      <button onClick={() => downloadPdf(p.id, p.cin)} style={{ padding: '4px 10px', background: '#f3f4f6', border: '1px solid var(--border)', borderRadius: 6, fontSize: 11, cursor: 'pointer' }}>⬇️</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16 }}>
+          <button className="btn btn-outline" disabled={page === 0} onClick={() => load(page-1, search)} style={{ fontSize: 12 }}>← Préc.</button>
+          <span style={{ padding: '6px 12px', fontSize: 12, color: 'var(--gray)' }}>Page {page+1} / {totalPages}</span>
+          <button className="btn btn-outline" disabled={page >= totalPages-1} onClick={() => load(page+1, search)} style={{ fontSize: 12 }}>Suiv. →</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Section Médecins (directeur) ───────────────────────────────────────────
+function DirecteurMedecinsSection() {
+  const [medecins, setMedecins] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setLoading(true)
+    directeurApi.medecins()
+      .then(r => setMedecins(r.data || []))
+      .catch(() => setError('Impossible de charger les médecins.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+  return (
+    <div>
+      {error && <div className="alert alert-warning">{error}</div>}
+      {medecins.length === 0
+        ? <EmptyState icon="👨‍⚕️" label="Aucun médecin enregistré dans le système." />
+        : (
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '2px solid var(--border)' }}>
+                  {['Nom complet', 'Matricule', 'Spécialité', 'Service', 'Synchronisation'].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, color: 'var(--gray)', fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {medecins.map((m, i) => (
+                  <tr key={m.id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'white' : '#fafafa' }}>
+                    <td style={{ padding: '10px 14px', fontWeight: 600 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700 }}>
+                          {m.prenom?.[0]}{m.nom?.[0]}
+                        </div>
+                        {m.nomComplet}
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px 14px' }}>{m.matricule || '—'}</td>
+                    <td style={{ padding: '10px 14px' }}>
+                      {m.specialite ? <span style={{ background: '#ede9fe', color: '#5b21b6', fontSize: 11, borderRadius: 6, padding: '2px 8px' }}>{m.specialite}</span> : '—'}
+                    </td>
+                    <td style={{ padding: '10px 14px' }}>{m.service || '—'}</td>
+                    <td style={{ padding: '10px 14px', fontSize: 11, color: 'var(--gray)' }}>
+                      {m.derniereSynchronisation ? new Date(m.derniereSynchronisation).toLocaleDateString('fr-FR') : 'Jamais'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </div>
+  )
+}
+
+// ── Section Comptes (directeur, utilise adminApi) ──────────────────────────
+function DirecteurComptesSection() {
+  const [users, setUsers] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [filter, setFilter] = useState('ALL')
+  const { user: me } = useAuth()
+
+  const load = async () => {
+    setLoading(true)
+    try { const r = await adminApi.listUsers(); setUsers(r.data) }
+    catch { setError('Impossible de charger les comptes.') }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleToggle = async (id) => {
+    try { await adminApi.toggleUser(id); setSuccess('Statut mis à jour.'); load(); setTimeout(() => setSuccess(''), 3000) }
+    catch { setError('Erreur mise à jour.') }
+  }
+
+  const roleColor = { ADMIN: '#fee2e2', MEDECIN: '#dbeafe', PERSONNEL: '#d1fae5', PATIENT: '#f3f4f6', DIRECTEUR: '#fef3c7' }
+  const roleText  = { ADMIN: '#991b1b', MEDECIN: '#1e40af', PERSONNEL: '#065f46', PATIENT: '#374151', DIRECTEUR: '#78350f' }
+  const roles = ['ALL', 'PATIENT', 'MEDECIN', 'PERSONNEL', 'ADMIN', 'DIRECTEUR']
+  const filtered = filter === 'ALL' ? users : users.filter(u => u.role === filter)
+  const counts = roles.reduce((acc, r) => { acc[r] = r === 'ALL' ? users.length : users.filter(u => u.role === r).length; return acc }, {})
+
+  return (
+    <div>
+      {error && <div className="alert alert-error" style={{ marginBottom: 10 }}>⚠️ {error}</div>}
+      {success && <div className="alert alert-success" style={{ marginBottom: 10 }}>✅ {success}</div>}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
+        {roles.map(r => (
+          <button key={r} onClick={() => setFilter(r)}
+            style={{ padding: '6px 14px', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 12,
+              background: filter === r ? '#2563eb' : '#f3f4f6',
+              color: filter === r ? 'white' : '#374151', fontWeight: filter === r ? 700 : 400 }}>
+            {r} ({counts[r] || 0})
+          </button>
+        ))}
+      </div>
+      {loading ? <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+      : (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '2px solid var(--border)' }}>
+                {['Nom', 'Email', 'CIN', 'Rôle', 'Statut', 'Action'].map(h => (
+                  <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, color: 'var(--gray)', fontWeight: 600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((u, i) => (
+                <tr key={u.id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'white' : '#fafafa' }}>
+                  <td style={{ padding: '10px 14px', fontWeight: 600 }}>{u.prenom} {u.nom}</td>
+                  <td style={{ padding: '10px 14px' }}>{u.email}</td>
+                  <td style={{ padding: '10px 14px' }}>{u.cin || '—'}</td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <span style={{ background: roleColor[u.role] || '#f3f4f6', color: roleText[u.role] || '#374151', borderRadius: 6, padding: '2px 10px', fontSize: 10, fontWeight: 700 }}>{u.role}</span>
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <span style={{ background: u.enabled ? '#d1fae5' : '#fee2e2', color: u.enabled ? '#065f46' : '#991b1b', borderRadius: 6, padding: '2px 8px', fontSize: 10, fontWeight: 600 }}>
+                      {u.enabled ? '✓ Actif' : '✗ Inactif'}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    {u.id !== me?.userId && (
+                      <button onClick={() => handleToggle(u.id)}
+                        style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 9px', cursor: 'pointer', fontSize: 11 }}>
+                        {u.enabled ? '🔒 Désactiver' : '🔓 Activer'}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Section RDV (directeur) ────────────────────────────────────────────────
+function DirecteurRdvSection() {
+  const [rdvList, setRdvList] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setLoading(true)
+    directeurApi.rdv()
+      .then(r => setRdvList(r.data || []))
+      .catch(() => setError('Service rendez-vous non disponible.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const statutColor = {
+    CONFIRME: { bg: '#d1fae5', text: '#065f46' },
+    EN_ATTENTE: { bg: '#fef3c7', text: '#78350f' },
+    ANNULE: { bg: '#fee2e2', text: '#991b1b' },
+    TERMINE: { bg: '#f3f4f6', text: '#374151' },
+  }
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+  return (
+    <div>
+      {error && <div className="alert alert-warning" style={{ marginBottom: 12 }}>⚠️ {error}</div>}
+      {rdvList.length === 0
+        ? (
+          <div className="card" style={{ padding: 40, textAlign: 'center' }}>
+            <div style={{ fontSize: 40, marginBottom: 10 }}>📅</div>
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Aucun rendez-vous</div>
+            <div style={{ fontSize: 13, color: 'var(--gray)' }}>
+              {error ? 'Le module rendez-vous (ms-rdv) n\'est pas connecté.' : 'Aucun rendez-vous planifié.'}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--gray)', marginTop: 8, background: '#f8fafc', borderRadius: 8, padding: '8px 12px', display: 'inline-block' }}>
+              Configurer via : <code>MS_RDV_URL=http://localhost:8083</code>
+            </div>
+          </div>
+        )
+        : (
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '2px solid var(--border)' }}>
+                  {['Date', 'Heure', 'Motif', 'Médecin', 'Service', 'Statut'].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, color: 'var(--gray)', fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rdvList.map((rdv, i) => {
+                  const sc = statutColor[rdv.statut] || { bg: '#f3f4f6', text: '#374151' }
+                  return (
+                    <tr key={rdv.id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'white' : '#fafafa' }}>
+                      <td style={{ padding: '10px 14px', fontWeight: 600 }}>{rdv.date ? new Date(rdv.date).toLocaleDateString('fr-FR') : '—'}</td>
+                      <td style={{ padding: '10px 14px' }}>{rdv.heure || '—'}</td>
+                      <td style={{ padding: '10px 14px' }}>{rdv.motif || '—'}</td>
+                      <td style={{ padding: '10px 14px' }}>{rdv.medecinNom || '—'}{rdv.medecinSpecialite ? ` (${rdv.medecinSpecialite})` : ''}</td>
+                      <td style={{ padding: '10px 14px' }}>{rdv.service || '—'}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ background: sc.bg, color: sc.text, fontSize: 10, borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>{rdv.statut || '—'}</span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </div>
+  )
+}
+
+// ── MAIN DirecteurDashboard ────────────────────────────────────────────────
+export function DirecteurDashboard() {
+  const { user } = useAuth()
+  const [view, setView] = useState('stats')
+  const [stats, setStats] = useState(null)
+  const [loadingStats, setLoadingStats] = useState(false)
+
+  useEffect(() => {
+    setLoadingStats(true)
+    directeurApi.stats()
+      .then(r => setStats(r.data))
+      .catch(() => {})
+      .finally(() => setLoadingStats(false))
+  }, [])
+
+  const navItems = [
+    { key: 'stats',    label: '📊 Vue d\'ensemble' },
+    { key: 'patients', label: '👥 Patients' },
+    { key: 'medecins', label: '👨‍⚕️ Médecins' },
+    { key: 'comptes',  label: '🔑 Comptes' },
+    { key: 'rdv',      label: '📅 RDV & Planning' },
+  ]
+
+  return (
+    <div>
+      <Navbar role="Direction" />
+      <div className="container">
+        <div style={{ padding: '40px 0 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <h1 style={{ fontFamily: 'Syne', fontSize: 28, fontWeight: 800 }}>
+              👔 Direction — {user?.prenom} {user?.nom}
+            </h1>
+            <p style={{ color: 'var(--gray)', marginTop: 4 }}>
+              Tableau de bord de direction — accès complet à tous les modules
+            </p>
+          </div>
+          {/* Résumé rapide dans l'en-tête */}
+          {stats && (
+            <div style={{ display: 'flex', gap: 10 }}>
+              {[
+                { label: 'Patients', value: stats.totalPatients, color: '#2563eb' },
+                { label: 'Médecins', value: stats.totalMedecins, color: '#7c3aed' },
+                { label: 'Analyses en attente', value: stats.analysesEnAttente, color: '#d97706' },
+              ].map(s => (
+                <div key={s.label} style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 14px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: s.color }}>{s.value}</div>
+                  <div style={{ fontSize: 10, color: 'var(--gray)' }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Navigation */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 24, flexWrap: 'wrap' }}>
+          {navItems.map(t => (
+            <button key={t.key} onClick={() => setView(t.key)}
+              style={{ padding: '8px 18px', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 13,
+                background: view === t.key ? '#1e293b' : '#f3f4f6',
+                color: view === t.key ? 'white' : '#374151',
+                fontWeight: view === t.key ? 700 : 400 }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {view === 'stats' && (
+          loadingStats
+            ? <div style={{ textAlign: 'center', padding: 60 }}><span className="spinner" /></div>
+            : <StatsSection stats={stats} />
+        )}
+        {view === 'patients' && (
+          <div>
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>👥 Gestion des patients</h2>
+            <DirecteurPatientsSection />
+          </div>
+        )}
+        {view === 'medecins' && (
+          <div>
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>👨‍⚕️ Personnel médical</h2>
+            <DirecteurMedecinsSection />
+          </div>
+        )}
+        {view === 'comptes' && (
+          <div>
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>🔑 Tous les comptes utilisateurs</h2>
+            <DirecteurComptesSection />
+          </div>
+        )}
+        {view === 'rdv' && (
+          <div>
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>📅 Rendez-vous & Planning</h2>
+            <DirecteurRdvSection />
+          </div>
+        )}
+
         <div style={{ height: 40 }} />
       </div>
     </div>

@@ -18,7 +18,7 @@ public class JwtService {
     @Value("${jwt.secret:medsys-secret-key-hospital-management-2026-very-long-secret}")
     private String secretKey;
 
-    @Value("${jwt.expiration:86400000}") // 24h par défaut
+    @Value("${jwt.expiration:86400000}")
     private long jwtExpiration;
 
     private SecretKey getSigningKey() {
@@ -55,6 +55,11 @@ public class JwtService {
 
     public Long extractPatientId(String token) {
         return extractClaims(token).get("patientId", Long.class);
+    }
+
+    public String extractRole(String token) {
+        String role = extractClaims(token).get("role", String.class);
+        return role != null ? role : "PATIENT";
     }
 
     public boolean isTokenValid(String token) {

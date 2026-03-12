@@ -35,4 +35,13 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
 
     @Query("SELECT COUNT(p) FROM Patient p WHERE p.createdAt >= :date")
     Long countPatientsCreatedAfter(@Param("date") LocalDateTime date);
+
+    @Query("SELECT p.ville, COUNT(p) FROM Patient p WHERE p.ville IS NOT NULL AND p.ville != '' GROUP BY p.ville ORDER BY COUNT(p) DESC")
+    List<Object[]> countByVille();
+
+    @Query("SELECT p.groupeSanguin, COUNT(p) FROM Patient p WHERE p.groupeSanguin IS NOT NULL GROUP BY p.groupeSanguin ORDER BY COUNT(p) DESC")
+    List<Object[]> countByGroupeSanguin();
+
+    @Query("SELECT YEAR(p.createdAt), MONTH(p.createdAt), COUNT(p) FROM Patient p WHERE p.createdAt >= :since GROUP BY YEAR(p.createdAt), MONTH(p.createdAt) ORDER BY YEAR(p.createdAt), MONTH(p.createdAt)")
+    List<Object[]> countByMonth(@Param("since") LocalDateTime since);
 }

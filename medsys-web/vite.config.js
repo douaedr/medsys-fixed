@@ -6,7 +6,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api/v1/patients': { target: 'http://localhost:8081', changeOrigin: true },
-      '/api/v1/patient': { target: 'http://localhost:8081', changeOrigin: true },
+      '/api/v1/patient':  { target: 'http://localhost:8081', changeOrigin: true },
+      '/api/v1/directeur':{ target: 'http://localhost:8081', changeOrigin: true },
       '/api': { target: 'http://localhost:8082', changeOrigin: true }
     }
   }
