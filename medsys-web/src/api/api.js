@@ -39,6 +39,13 @@ export const patientApi = {
   me: () => PATIENT_API.get('/patient/me'),
   myDossier: () => PATIENT_API.get('/patient/me/dossier'),
   dossier: (id) => PATIENT_API.get(`/patients/${id}/dossier`),
+  // Documents patient
+  uploadDocument: (formData) => PATIENT_API.post('/patient/me/documents', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  getDocuments: () => PATIENT_API.get('/patient/me/documents'),
+  deleteDocument: (id) => PATIENT_API.delete(`/patient/me/documents/${id}`),
+  getDocumentFileUrl: (id) => `/api/v1/patient/me/documents/${id}/fichier`,
 }
 
 export const adminApi = {

@@ -187,6 +187,220 @@ function RadiologiesList({ items }) {
   )
 }
 
+
+// ─── Section Documents Patient ────────────────────────────────────────────
+const TYPE_LABELS = {
+  ORDONNANCE: { label: 'Ordonnance', icon: '💊', color: '#d1fae5', text: '#065f46' },
+  ANALYSE:    { label: 'Analyse',    icon: '🧪', color: '#fef3c7', text: '#78350f' },
+  RADIOLOGIE: { label: 'Radiologie', icon: '🩻', color: '#dbeafe', text: '#1e40af' },
+  CERTIFICAT: { label: 'Certificat', icon: '📄', color: '#ede9fe', text: '#5b21b6' },
+  AUTRE:      { label: 'Autre',      icon: '📎', color: '#f3f4f6', text: '#374151' },
+}
+
+function DocumentsSection() {
+  const [documents, setDocuments] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ type: 'ORDONNANCE', description: '', fichier: null })
+
+  const loadDocuments = async () => {
+    setLoading(true)
+    try {
+      const r = await patientApi.getDocuments()
+      setDocuments(r.data)
+    } catch {
+      setError('Impossible de charger vos documents.')
+    } finally { setLoading(false) }
+  }
+
+  useEffect(() => { loadDocuments() }, [])
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf']
+    if (!allowed.includes(file.type)) {
+      setError('Seuls les fichiers PDF et images (JPG, PNG) sont acceptés.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Le fichier ne doit pas dépasser 10 MB.')
+      return
+    }
+    setError('')
+    setForm(f => ({ ...f, fichier: file }))
+  }
+
+  const handleUpload = async (e) => {
+    e.preventDefault()
+    if (!form.fichier) { setError('Veuillez sélectionner un fichier.'); return }
+    setUploading(true); setError(''); setSuccess('')
+    try {
+      const fd = new FormData()
+      fd.append('fichier', form.fichier)
+      fd.append('type', form.type)
+      fd.append('description', form.description)
+      await patientApi.uploadDocument(fd)
+      setSuccess('Document uploadé avec succès !')
+      setForm({ type: 'ORDONNANCE', description: '', fichier: null })
+      setShowForm(false)
+      loadDocuments()
+      setTimeout(() => setSuccess(''), 4000)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erreur lors de l'upload.')
+    } finally { setUploading(false) }
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Supprimer ce document ?')) return
+    try {
+      await patientApi.deleteDocument(id)
+      setDocuments(docs => docs.filter(d => d.id !== id))
+      setSuccess('Document supprimé.')
+      setTimeout(() => setSuccess(''), 3000)
+    } catch {
+      setError('Erreur lors de la suppression.')
+    }
+  }
+
+  const formatSize = (bytes) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return bytes + ' o'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko'
+    return (bytes / (1024 * 1024)).toFixed(1) + ' Mo'
+  }
+
+  const token = sessionStorage.getItem('medsys_token')
+
+  return (
+    <div>
+      {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>⚠️ {error}</div>}
+      {success && <div className="alert alert-success" style={{ marginBottom: 12 }}>✅ {success}</div>}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ fontSize: 14, color: 'var(--gray)' }}>
+          {documents.length} document{documents.length !== 1 ? 's' : ''} enregistré{documents.length !== 1 ? 's' : ''}
+        </div>
+        <button className="btn btn-primary" onClick={() => { setShowForm(f => !f); setError('') }}
+          style={{ padding: '8px 18px', fontSize: 13 }}>
+          {showForm ? '✕ Annuler' : '+ Ajouter un document'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="card" style={{ padding: 20, marginBottom: 20, background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, marginBottom: 14, fontSize: 15 }}>📤 Nouveau document</div>
+          <form onSubmit={handleUpload}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+              <div className="form-group">
+                <label className="form-label">Type de document *</label>
+                <select className="form-select" value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}>
+                  <option value="ORDONNANCE">💊 Ordonnance</option>
+                  <option value="ANALYSE">🧪 Analyse / Bilan</option>
+                  <option value="RADIOLOGIE">🩻 Radio / Scanner / IRM</option>
+                  <option value="CERTIFICAT">📄 Certificat médical</option>
+                  <option value="AUTRE">📎 Autre document</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Description (optionnelle)</label>
+                <input className="form-input" value={form.description}
+                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Ex: Bilan sanguin mars 2026" />
+              </div>
+            </div>
+            <div className="form-group" style={{ marginBottom: 14 }}>
+              <label className="form-label">Fichier * (PDF ou image, max 10 MB)</label>
+              <input type="file" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
+                onChange={handleFileChange}
+                style={{ display: 'block', padding: '8px 0', fontSize: 13 }} />
+              {form.fichier && (
+                <div style={{ fontSize: 12, color: '#059669', marginTop: 4 }}>
+                  ✓ {form.fichier.name} ({formatSize(form.fichier.size)})
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-primary" type="submit" disabled={uploading || !form.fichier}
+                style={{ padding: '9px 22px', fontSize: 13 }}>
+                {uploading ? <span className="spinner" /> : '📤 Envoyer'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+      ) : documents.length === 0 ? (
+        <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--gray)' }}>
+          <div style={{ fontSize: 40, marginBottom: 10 }}>📂</div>
+          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Aucun document importé</div>
+          <div style={{ fontSize: 13 }}>Cliquez sur "Ajouter un document" pour importer vos ordonnances, analyses ou radios.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {documents.map(doc => {
+            const meta = TYPE_LABELS[doc.typeDocument] || TYPE_LABELS.AUTRE
+            const isImage = doc.contentType?.startsWith('image/')
+            const fileUrl = patientApi.getDocumentFileUrl(doc.id)
+            const authedUrl = fileUrl + '?token=' + token
+            return (
+              <div key={doc.id} style={{ border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px',
+                display: 'flex', alignItems: 'center', gap: 14, background: 'white' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 10, background: meta.color,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
+                  {meta.icon}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                    <span style={{ fontWeight: 700, fontSize: 13 }}>{doc.nomFichierOriginal}</span>
+                    <span style={{ background: meta.color, color: meta.text, fontSize: 10, borderRadius: 6,
+                      padding: '2px 8px', fontWeight: 600, flexShrink: 0 }}>{meta.label}</span>
+                  </div>
+                  {doc.description && <div style={{ fontSize: 12, color: '#374151', marginBottom: 2 }}>{doc.description}</div>}
+                  <div style={{ fontSize: 11, color: 'var(--gray)' }}>
+                    {formatSize(doc.tailleFichier)}
+                    {doc.dateUpload && ' · ' + new Date(doc.dateUpload).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    {doc.contentType && ' · ' + (doc.contentType === 'application/pdf' ? 'PDF' : 'Image')}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <a href={`/api/v1/patient/me/documents/${doc.id}/fichier`}
+                    target="_blank" rel="noopener noreferrer"
+                    onClick={e => {
+                      e.preventDefault()
+                      const t = sessionStorage.getItem('medsys_token')
+                      fetch(`/api/v1/patient/me/documents/${doc.id}/fichier`, {
+                        headers: { Authorization: `Bearer ${t}` }
+                      }).then(r => r.blob()).then(blob => {
+                        const url = URL.createObjectURL(blob)
+                        window.open(url, '_blank')
+                      })
+                    }}
+                    style={{ padding: '6px 12px', background: '#dbeafe', color: '#1e40af', border: 'none',
+                      borderRadius: 8, fontSize: 12, cursor: 'pointer', textDecoration: 'none',
+                      display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    👁️ Voir
+                  </a>
+                  <button onClick={() => handleDelete(doc.id)}
+                    style={{ padding: '6px 12px', background: '#fee2e2', color: '#991b1b', border: 'none',
+                      borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PATIENT DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════
@@ -228,9 +442,16 @@ export function PatientDashboard() {
         </div>
         {error && <div className="alert alert-error">⚠️ {error}</div>}
         {loading && <div style={{ textAlign: 'center', padding: 20 }}><span className="spinner" /></div>}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-          {[{ key: 'accueil', label: '🏠 Accueil' }, { key: 'dossier', label: '📁 Mon dossier médical' }].map(t => (
-            <button key={t.key} onClick={() => t.key === 'dossier' ? loadDossier() : setView('accueil')}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
+          {[
+            { key: 'accueil', label: '🏠 Accueil' },
+            { key: 'dossier', label: '📁 Mon dossier médical' },
+            { key: 'documents', label: '📂 Mes documents' },
+          ].map(t => (
+            <button key={t.key} onClick={() => {
+              if (t.key === 'dossier') loadDossier()
+              else setView(t.key)
+            }}
               style={{ padding: '8px 20px', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 14,
                 background: view === t.key ? '#2563eb' : '#f3f4f6', color: view === t.key ? 'white' : '#374151',
                 fontWeight: view === t.key ? 700 : 400 }}>
@@ -260,11 +481,12 @@ export function PatientDashboard() {
                 </div>
               </div>
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
               {[
                 { icon: '📋', title: 'Mon dossier', sub: 'Antécédents, consultations', color: '#dbeafe', action: loadDossier },
                 { icon: '🧪', title: 'Mes analyses', sub: 'Résultats de laboratoire', color: '#fef3c7', action: loadDossier },
                 { icon: '💊', title: 'Mes ordonnances', sub: 'Traitements prescrits', color: '#d1fae5', action: loadDossier },
+                { icon: '📂', title: 'Mes documents', sub: 'Ordonnances, radios, bilans', color: '#ede9fe', action: () => setView('documents') },
               ].map((item, i) => (
                 <div key={i} className="card" style={{ padding: 20, cursor: 'pointer' }} onClick={item.action}>
                   <div style={{ width: 48, height: 48, borderRadius: 12, background: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, marginBottom: 12 }}>{item.icon}</div>
@@ -276,6 +498,7 @@ export function PatientDashboard() {
           </>
         )}
         {view === 'dossier' && <DossierMedical dossier={dossier} />}
+        {view === 'documents' && <div className="card" style={{ padding: 20 }}><div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, marginBottom: 16 }}>📂 Mes documents médicaux</div><DocumentsSection /></div>}
         <div style={{ height: 40 }} />
       </div>
     </div>
