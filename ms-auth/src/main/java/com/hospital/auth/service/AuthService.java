@@ -37,16 +37,22 @@ public class AuthService {
     // ── Login ─────────────────────────────────────────────────────────────────
     public AuthResponse login(LoginRequest req) {
         UserAccount user = userRepo.findByEmail(req.getEmail())
-                .orElseThrow(() -> new AuthException("Email ou mot de passe incorrect"));
+                .orElseThrow(() -> {
+                    log.warn("[AUDIT] Tentative de connexion échouée pour email inconnu: {}", req.getEmail());
+                    return new AuthException("Email ou mot de passe incorrect");
+                });
 
         if (!user.isEnabled()) {
+            log.warn("[AUDIT] Tentative de connexion sur compte désactivé: {}", req.getEmail());
             throw new AuthException("Compte désactivé. Contactez l'administrateur.");
         }
 
         if (!passwordEncoder.matches(req.getPassword(), user.getPassword())) {
+            log.warn("[AUDIT] Mot de passe incorrect pour: {}", req.getEmail());
             throw new AuthException("Email ou mot de passe incorrect");
         }
 
+        log.info("[AUDIT] Connexion réussie: {} (role={})", user.getEmail(), user.getRole());
         return buildAuthResponse(user);
     }
 
@@ -75,7 +81,7 @@ public class AuthService {
                 .build();
 
         userRepo.save(user);
-        log.info("Patient enregistré : {} {}", req.getNom(), req.getPrenom());
+        log.info("[AUDIT] Nouveau patient enregistré : {} {} (email={})", req.getNom(), req.getPrenom(), req.getEmail());
 
         return buildAuthResponse(user);
     }
@@ -98,6 +104,7 @@ public class AuthService {
                 .build();
 
         userRepo.save(user);
+        log.info("[AUDIT] Compte personnel créé : {} {} (role={}, email={})", req.getNom(), req.getPrenom(), req.getRole(), req.getEmail());
 
         // Envoyer email avec les identifiants
         emailService.sendAccountCreatedEmail(user.getEmail(), user.getNom(), req.getPassword());
@@ -107,16 +114,15 @@ public class AuthService {
 
     // ── Mot de passe oublié ───────────────────────────────────────────────────
     public void forgotPassword(ForgotPasswordRequest req) {
-        UserAccount user = userRepo.findByEmail(req.getEmail())
-                .orElseThrow(() -> new AuthException("Aucun compte trouvé avec cet email"));
-
-        String token = UUID.randomUUID().toString();
-        user.setResetToken(token);
-        user.setResetTokenExpiry(LocalDateTime.now().plusHours(1));
-        userRepo.save(user);
-
-        emailService.sendPasswordResetEmail(user.getEmail(), user.getNom(), token);
-        log.info("Email de réinitialisation envoyé à {}", user.getEmail());
+        // On ne révèle pas si l'email existe (protection contre l'énumération d'utilisateurs)
+        userRepo.findByEmail(req.getEmail()).ifPresent(user -> {
+            String token = UUID.randomUUID().toString();
+            user.setResetToken(token);
+            user.setResetTokenExpiry(LocalDateTime.now().plusHours(1));
+            userRepo.save(user);
+            emailService.sendPasswordResetEmail(user.getEmail(), user.getNom(), token);
+            log.info("[AUDIT] Demande de réinitialisation de mot de passe pour {}", user.getEmail());
+        });
     }
 
     // ── Réinitialiser mot de passe ────────────────────────────────────────────
@@ -132,7 +138,7 @@ public class AuthService {
         user.setResetToken(null);
         user.setResetTokenExpiry(null);
         userRepo.save(user);
-        log.info("Mot de passe réinitialisé pour {}", user.getEmail());
+        log.info("[AUDIT] Mot de passe réinitialisé pour {}", user.getEmail());
     }
 
     // ── Changer mot de passe ──────────────────────────────────────────────────

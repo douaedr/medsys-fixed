@@ -1,5 +1,6 @@
 package com.hospital.auth.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.hospital.auth.enums.Role;
 import jakarta.persistence.*;
 import lombok.*;
@@ -23,6 +24,7 @@ public class UserAccount {
     @Column(nullable = false, unique = true)
     private String email;
 
+    @JsonIgnore
     @Column(nullable = false)
     private String password;
 
@@ -48,7 +50,9 @@ public class UserAccount {
     private boolean enabled = true;
 
     // Pour mot de passe oublié
+    @JsonIgnore
     private String resetToken;
+    @JsonIgnore
     private LocalDateTime resetTokenExpiry;
 
     @CreationTimestamp
