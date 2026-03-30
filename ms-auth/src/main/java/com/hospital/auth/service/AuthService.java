@@ -15,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -34,6 +35,8 @@ public class AuthService {
     @Value("${ms-patient.url}")
     private String msPatientUrl;
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
     // ── Login ─────────────────────────────────────────────────────────────────
     public AuthResponse login(LoginRequest req) {
         UserAccount user = userRepo.findByEmail(req.getEmail())
@@ -47,7 +50,61 @@ public class AuthService {
             throw new AuthException("Email ou mot de passe incorrect");
         }
 
+        // 2FA activé pour MEDECIN et ADMIN
+        if (user.isTwoFaEnabled()) {
+            String code = String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
+            user.setTwoFaCode(passwordEncoder.encode(code));
+            user.setTwoFaCodeExpiry(LocalDateTime.now().plusMinutes(10));
+            userRepo.save(user);
+            emailService.sendTwoFaCode(user.getEmail(), user.getPrenom(), code);
+            log.info("Code 2FA envoyé à {}", user.getEmail());
+            return AuthResponse.builder()
+                    .requiresTwoFa(true)
+                    .twoFaSessionId(user.getEmail())
+                    .role(user.getRole().name())
+                    .build();
+        }
+
         return buildAuthResponse(user);
+    }
+
+    // ── Vérification code 2FA ─────────────────────────────────────────────────
+    public AuthResponse verifyTwoFa(String email, String code) {
+        UserAccount user = userRepo.findByEmail(email)
+                .orElseThrow(() -> new AuthException("Session invalide"));
+
+        if (user.getTwoFaCode() == null || user.getTwoFaCodeExpiry() == null) {
+            throw new AuthException("Aucun code 2FA en attente");
+        }
+        if (user.getTwoFaCodeExpiry().isBefore(LocalDateTime.now())) {
+            throw new AuthException("Code 2FA expiré. Veuillez vous reconnecter.");
+        }
+        if (!passwordEncoder.matches(code, user.getTwoFaCode())) {
+            throw new AuthException("Code 2FA incorrect");
+        }
+
+        user.setTwoFaCode(null);
+        user.setTwoFaCodeExpiry(null);
+        userRepo.save(user);
+
+        log.info("2FA validé pour {}", email);
+        return buildAuthResponse(user);
+    }
+
+    // ── Activer / Désactiver 2FA ──────────────────────────────────────────────
+    public Map<String, Object> toggleTwoFa(String email) {
+        UserAccount user = userRepo.findByEmail(email)
+                .orElseThrow(() -> new AuthException("Utilisateur non trouvé"));
+
+        user.setTwoFaEnabled(!user.isTwoFaEnabled());
+        userRepo.save(user);
+
+        return Map.of(
+                "twoFaEnabled", user.isTwoFaEnabled(),
+                "message", user.isTwoFaEnabled()
+                        ? "Authentification à deux facteurs activée"
+                        : "Authentification à deux facteurs désactivée"
+        );
     }
 
     // ── Register Patient ──────────────────────────────────────────────────────

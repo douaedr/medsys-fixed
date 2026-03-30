@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { authApi } from '../api/api'
@@ -18,6 +18,10 @@ export default function PersonnelLoginPage() {
   const [forgotEmail, setForgotEmail] = useState('')
   const [forgotMsg, setForgotMsg] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  // 2FA state
+  const [twoFaPending, setTwoFaPending] = useState(false)
+  const [twoFaEmail, setTwoFaEmail] = useState('')
+  const [twoFaCode, setTwoFaCode] = useState('')
   const { login } = useAuth()
   const navigate = useNavigate()
 
@@ -30,12 +34,31 @@ export default function PersonnelLoginPage() {
         setError("Cet espace est réservé au personnel. Les patients doivent utiliser l'espace patient.")
         return
       }
+      if (data.requiresTwoFa) {
+        setTwoFaEmail(data.twoFaSessionId)
+        setTwoFaPending(true)
+        return
+      }
       login(data, data.token)
       if (data.role === 'ADMIN') navigate('/admin')
       else if (data.role === 'DIRECTEUR') navigate('/directeur')
       else navigate('/personnel/dashboard')
     } catch (err) {
       setError(err.response?.data?.message || 'Identifiants incorrects')
+    } finally { setLoading(false) }
+  }
+
+  const handleVerify2fa = async (e) => {
+    e.preventDefault()
+    setError(''); setLoading(true)
+    try {
+      const { data } = await authApi.verify2fa(twoFaEmail, twoFaCode)
+      login(data, data.token)
+      if (data.role === 'ADMIN') navigate('/admin')
+      else if (data.role === 'DIRECTEUR') navigate('/directeur')
+      else navigate('/personnel/dashboard')
+    } catch (err) {
+      setError(err.response?.data?.message || 'Code invalide ou expiré')
     } finally { setLoading(false) }
   }
 
@@ -106,7 +129,50 @@ export default function PersonnelLoginPage() {
         padding: '60px 48px', overflowY: 'auto'
       }} className="login-right-panel">
 
-        {!showForgot ? (
+        {twoFaPending ? (
+          <>
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 16, background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, marginBottom: 16, border: '1px solid #bfdbfe' }}>🔐</div>
+              <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: 24, fontWeight: 800, color: 'var(--dark)', marginBottom: 6 }}>
+                Vérification 2FA
+              </h2>
+              <p style={{ color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.6 }}>
+                Un code à 6 chiffres a été envoyé à <strong>{twoFaEmail}</strong>. Valable 10 minutes.
+              </p>
+            </div>
+            {error && (
+              <div className="alert alert-error" style={{ marginBottom: 20 }}>
+                <span className="alert-icon">⚠️</span><span>{error}</span>
+              </div>
+            )}
+            <form onSubmit={handleVerify2fa} style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+              <div className="form-group">
+                <label className="form-label">Code de vérification</label>
+                <div className="input-wrapper">
+                  <span className="input-icon">🔢</span>
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="123456"
+                    value={twoFaCode}
+                    onChange={e => setTwoFaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    maxLength={6}
+                    required
+                    autoFocus
+                    style={{ letterSpacing: 6, fontSize: 22, fontWeight: 700 }}
+                  />
+                </div>
+              </div>
+              <button className="btn btn-primary btn-full btn-lg" disabled={loading || twoFaCode.length < 6} type="submit" style={{ marginTop: 8 }}>
+                {loading ? <><span className="spinner" style={{ width: 16, height: 16 }} /> Vérification...</> : '✅ Valider le code'}
+              </button>
+            </form>
+            <button onClick={() => { setTwoFaPending(false); setTwoFaCode(''); setError('') }}
+              style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, marginTop: 20, fontFamily: 'DM Sans, sans-serif' }}>
+              ← Retour à la connexion
+            </button>
+          </>
+        ) : !showForgot ? (
           <>
             <div style={{ marginBottom: 36 }}>
               <h2 style={{ fontFamily: 'Syne, sans-serif', fontSize: 26, fontWeight: 800, color: 'var(--dark)', marginBottom: 6 }}>

@@ -86,4 +86,30 @@ public class AuthController {
         }
         return ResponseEntity.ok(Map.of("email", authentication.getName(), "authorities", authentication.getAuthorities()));
     }
+
+    // ─── 2FA ─────────────────────────────────────────────────────────────────
+
+    @Operation(summary = "Vérifier le code 2FA après login",
+               description = "2e étape du login quand requiresTwoFa=true. Retourne le token JWT.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Code valide, token JWT retourné"),
+        @ApiResponse(responseCode = "401", description = "Code invalide ou expiré")
+    })
+    @PostMapping("/2fa/verify")
+    public ResponseEntity<AuthResponse> verifyTwoFa(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        String code  = body.get("code");
+        if (email == null || code == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(authService.verifyTwoFa(email, code));
+    }
+
+    @Operation(summary = "Activer/Désactiver le 2FA pour son compte",
+               description = "Disponible pour MEDECIN et ADMIN uniquement")
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/2fa/toggle")
+    public ResponseEntity<Map<String, Object>> toggleTwoFa(Authentication authentication) {
+        return ResponseEntity.ok(authService.toggleTwoFa(authentication.getName()));
+    }
 }

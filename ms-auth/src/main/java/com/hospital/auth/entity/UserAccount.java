@@ -51,6 +51,12 @@ public class UserAccount {
     private String resetToken;
     private LocalDateTime resetTokenExpiry;
 
+    // 2FA par email (pour MEDECIN et ADMIN)
+    @Builder.Default
+    private boolean twoFaEnabled = false;
+    private String twoFaCode;
+    private LocalDateTime twoFaCodeExpiry;
+
     @CreationTimestamp
     @Column(updatable = false)
     private LocalDateTime createdAt;

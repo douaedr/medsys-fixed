@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { patientApi, adminApi, directeurApi } from '../api/api'
+import { patientApi, adminApi, directeurApi, auditApi } from '../api/api'
 
 // ── Navbar partagée ─────────────────────────────────────────────────────────
 function Navbar({ role, notifCount = 0 }) {
@@ -441,14 +441,19 @@ function RendezVousSection() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ dateHeure: '', motif: '', service: '', lieu: '', notes: '' })
+  const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
+  const loadRdv = () => {
     setLoading(true)
     patientApi.getRdv()
       .then(r => setRdvList(r.data || []))
       .catch(() => setError('Service rendez-vous indisponible pour l\'instant.'))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(() => { loadRdv() }, [])
 
   const handleAnnuler = async (id) => {
     if (!window.confirm('Confirmer l\'annulation de ce rendez-vous ?')) return
@@ -457,6 +462,17 @@ function RendezVousSection() {
       setRdvList(l => l.map(r => r.id === id ? { ...r, statut: 'ANNULE' } : r))
       setSuccess('Rendez-vous annulé.'); setTimeout(() => setSuccess(''), 4000)
     } catch { setError('Impossible d\'annuler. Contactez la clinique.') }
+  }
+
+  const handlePrendre = async (e) => {
+    e.preventDefault(); setSaving(true); setError('')
+    try {
+      await patientApi.prendreRdv(form)
+      setSuccess('Rendez-vous demandé avec succès !'); setTimeout(() => setSuccess(''), 5000)
+      setShowForm(false); setForm({ dateHeure: '', motif: '', service: '', lieu: '', notes: '' })
+      loadRdv()
+    } catch (err) { setError(err.response?.data?.message || 'Erreur lors de la prise de rendez-vous.') }
+    finally { setSaving(false) }
   }
 
   const statutColor = {
@@ -470,6 +486,55 @@ function RendezVousSection() {
     <div>
       {error && <div className="alert alert-warning" style={{ marginBottom: 12 }}>⚠️ {error}</div>}
       {success && <div className="alert alert-success" style={{ marginBottom: 12 }}>✅ {success}</div>}
+
+      {/* Bouton + formulaire prise de RDV */}
+      <div style={{ marginBottom: 16 }}>
+        {!showForm ? (
+          <button className="btn btn-primary" onClick={() => setShowForm(true)} style={{ fontSize: 13 }}>
+            ➕ Demander un rendez-vous
+          </button>
+        ) : (
+          <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+            <div style={{ fontFamily: 'Syne', fontWeight: 700, marginBottom: 14 }}>📅 Nouvelle demande de RDV</div>
+            <form onSubmit={handlePrendre}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div className="form-group">
+                  <label className="form-label">Date et heure *</label>
+                  <input className="form-input" type="datetime-local" required value={form.dateHeure}
+                    onChange={e => setForm(f => ({ ...f, dateHeure: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Motif *</label>
+                  <input className="form-input" placeholder="Consultation, suivi…" required value={form.motif}
+                    onChange={e => setForm(f => ({ ...f, motif: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Service</label>
+                  <input className="form-input" placeholder="Cardiologie, Généraliste…" value={form.service}
+                    onChange={e => setForm(f => ({ ...f, service: e.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Lieu</label>
+                  <input className="form-input" placeholder="Cabinet, Bloc B…" value={form.lieu}
+                    onChange={e => setForm(f => ({ ...f, lieu: e.target.value }))} />
+                </div>
+                <div className="form-group" style={{ gridColumn: '1/-1' }}>
+                  <label className="form-label">Notes</label>
+                  <input className="form-input" placeholder="Informations supplémentaires…" value={form.notes}
+                    onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-primary" type="submit" disabled={saving}>
+                  {saving ? <span className="spinner" /> : '✅ Envoyer la demande'}
+                </button>
+                <button type="button" className="btn btn-outline" onClick={() => setShowForm(false)}>Annuler</button>
+              </div>
+            </form>
+          </div>
+        )}
+      </div>
+
       {loading ? <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
       : rdvList.length === 0
         ? (
@@ -601,6 +666,7 @@ function QrCodeSection({ profil }) {
   const [qrUrl, setQrUrl] = useState(null)
   const [loadingQr, setLoadingQr] = useState(false)
   const [loadingPdf, setLoadingPdf] = useState(false)
+  const [loadingRgpd, setLoadingRgpd] = useState(false)
   const [error, setError] = useState('')
 
   const loadQrCode = async () => {
@@ -623,6 +689,19 @@ function QrCodeSection({ profil }) {
       URL.revokeObjectURL(url)
     } catch { setError('Erreur génération PDF.') }
     finally { setLoadingPdf(false) }
+  }
+
+  const downloadRgpd = async () => {
+    setLoadingRgpd(true); setError('')
+    try {
+      const r = await patientApi.exportRgpd()
+      const url = URL.createObjectURL(r.data)
+      const a = document.createElement('a')
+      a.href = url; a.download = `export-rgpd-${profil?.cin || 'mes-donnees'}.zip`
+      document.body.appendChild(a); a.click(); a.remove()
+      URL.revokeObjectURL(url)
+    } catch { setError('Erreur export RGPD.') }
+    finally { setLoadingRgpd(false) }
   }
 
   return (
@@ -662,6 +741,19 @@ function QrCodeSection({ profil }) {
           {loadingPdf ? <span className="spinner" /> : '⬇️ Télécharger le PDF'}
         </button>
       </div>
+      {/* Export RGPD */}
+      <div className="card" style={{ padding: 24, textAlign: 'center', gridColumn: '1/-1' }}>
+        <div style={{ fontSize: 32, marginBottom: 8 }}>🔒</div>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, marginBottom: 6 }}>Export RGPD — Mes données</div>
+        <div style={{ fontSize: 13, color: 'var(--gray)', marginBottom: 16, maxWidth: 500, margin: '0 auto 16px' }}>
+          Téléchargez l'intégralité de vos données personnelles et médicales (ZIP avec JSON + PDF).
+          Conformément au Règlement Général sur la Protection des Données.
+        </div>
+        <button className="btn btn-outline" onClick={downloadRgpd} disabled={loadingRgpd}
+          style={{ border: '1px solid #6366f1', color: '#6366f1' }}>
+          {loadingRgpd ? <span className="spinner" /> : '📦 Télécharger mes données (RGPD)'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -689,6 +781,21 @@ export function PatientDashboard() {
     patientApi.notifications()
       .then(r => setNotifs(r.data))
       .catch(() => {})
+
+    // SSE — notifications temps réel
+    const token = sessionStorage.getItem('medsys_token')
+    if (token) {
+      const url = `/api/v1/notifications/stream?token=${encodeURIComponent(token)}`
+      const es = new EventSource(url)
+      es.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data)
+          setNotifs(n => ({ ...n, total: (n.total || 0) + 1, derniere: msg.message }))
+        } catch {}
+      }
+      es.onerror = () => es.close()
+      return () => es.close()
+    }
   }, [])
 
   const loadDossier = async () => {
@@ -852,6 +959,8 @@ export function PersonnelDashboard() {
   const [dossier, setDossier] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showAdvSearch, setShowAdvSearch] = useState(false)
+  const [advSearch, setAdvSearch] = useState({ ville: '', sexe: '', groupeSanguin: '', ageMin: '', ageMax: '' })
 
   const loadPatients = async (p = 0, q = '') => {
     setLoading(true); setError('')
@@ -862,6 +971,19 @@ export function PersonnelDashboard() {
       setTotal(res.data.totalElements || 0)
       setPage(p)
     } catch { setError('Impossible de charger la liste des patients.') }
+    finally { setLoading(false) }
+  }
+
+  const loadAdvSearch = async (p = 0) => {
+    setLoading(true); setError('')
+    try {
+      const params = { page: p, size: 10, ...Object.fromEntries(Object.entries(advSearch).filter(([, v]) => v !== '')) }
+      const res = await patientApi.rechercheAvancee(params)
+      setPatients(res.data.content || [])
+      setTotalPages(res.data.totalPages || 0)
+      setTotal(res.data.totalElements || 0)
+      setPage(p)
+    } catch { setError('Erreur recherche avancée.') }
     finally { setLoading(false) }
   }
 
@@ -907,11 +1029,62 @@ export function PersonnelDashboard() {
                 </div>
               ))}
             </div>
-            <form onSubmit={e => { e.preventDefault(); loadPatients(0, search) }} style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              <input className="form-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom, prénom ou CIN..." style={{ flex: 1 }} />
-              <button type="submit" className="btn btn-primary">🔍 Rechercher</button>
-              {search && <button type="button" className="btn btn-outline" onClick={() => { setSearch(''); loadPatients(0, '') }}>✕</button>}
-            </form>
+            <div style={{ marginBottom: 16 }}>
+              <form onSubmit={e => { e.preventDefault(); loadPatients(0, search) }} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <input className="form-input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher par nom, prénom ou CIN..." style={{ flex: 1 }} />
+                <button type="submit" className="btn btn-primary">🔍 Rechercher</button>
+                {search && <button type="button" className="btn btn-outline" onClick={() => { setSearch(''); loadPatients(0, '') }}>✕</button>}
+                <button type="button" className="btn btn-outline" onClick={() => setShowAdvSearch(s => !s)}
+                  style={{ fontSize: 12 }}>
+                  {showAdvSearch ? '▲ Masquer filtres' : '⚙️ Recherche avancée'}
+                </button>
+              </form>
+              {showAdvSearch && (
+                <div className="card" style={{ padding: 16 }}>
+                  <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 13, marginBottom: 12 }}>⚙️ Filtres avancés</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 12 }}>
+                    <div className="form-group">
+                      <label className="form-label">Ville</label>
+                      <input className="form-input" placeholder="Casablanca…" value={advSearch.ville}
+                        onChange={e => setAdvSearch(a => ({ ...a, ville: e.target.value }))} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Sexe</label>
+                      <select className="form-input" value={advSearch.sexe}
+                        onChange={e => setAdvSearch(a => ({ ...a, sexe: e.target.value }))}>
+                        <option value="">Tous</option>
+                        <option value="MASCULIN">Masculin</option>
+                        <option value="FEMININ">Féminin</option>
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Groupe sanguin</label>
+                      <select className="form-input" value={advSearch.groupeSanguin}
+                        onChange={e => setAdvSearch(a => ({ ...a, groupeSanguin: e.target.value }))}>
+                        <option value="">Tous</option>
+                        {['A_POSITIF','A_NEGATIF','B_POSITIF','B_NEGATIF','AB_POSITIF','AB_NEGATIF','O_POSITIF','O_NEGATIF'].map(g => (
+                          <option key={g} value={g}>{g.replace('_', ' ')}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Âge min</label>
+                      <input className="form-input" type="number" min="0" max="120" placeholder="0" value={advSearch.ageMin}
+                        onChange={e => setAdvSearch(a => ({ ...a, ageMin: e.target.value }))} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Âge max</label>
+                      <input className="form-input" type="number" min="0" max="120" placeholder="120" value={advSearch.ageMax}
+                        onChange={e => setAdvSearch(a => ({ ...a, ageMax: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="btn btn-primary" onClick={() => loadAdvSearch(0)} style={{ fontSize: 12 }}>🔍 Appliquer les filtres</button>
+                    <button className="btn btn-outline" onClick={() => { setAdvSearch({ ville: '', sexe: '', groupeSanguin: '', ageMin: '', ageMax: '' }); loadPatients(0, '') }} style={{ fontSize: 12 }}>✕ Réinitialiser</button>
+                  </div>
+                </div>
+              )}
+            </div>
             {loading ? <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
             : patients.length === 0 ? (
               <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--gray)' }}>
@@ -1595,6 +1768,98 @@ function DirecteurRdvSection() {
   )
 }
 
+// ── Audit Log Section ─────────────────────────────────────────────────────
+function AuditLogSection() {
+  const [logs, setLogs] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [page, setPage] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+  const [filter, setFilter] = useState({ niveau: '', action: '' })
+
+  const load = (p = 0) => {
+    setLoading(true)
+    auditApi.getLogs({ page: p, size: 20, ...filter })
+      .then(r => {
+        setLogs(r.data.content || r.data || [])
+        setTotalPages(r.data.totalPages || 1)
+        setPage(p)
+      })
+      .catch(() => setError('Journal d\'audit non disponible.'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load(0) }, [])
+
+  const niveauColor = {
+    INFO: { bg: '#dbeafe', text: '#1e40af' },
+    AVERTISSEMENT: { bg: '#fef3c7', text: '#78350f' },
+    CRITIQUE: { bg: '#fee2e2', text: '#991b1b' },
+  }
+
+  return (
+    <div>
+      {error && <div className="alert alert-warning" style={{ marginBottom: 12 }}>⚠️ {error}</div>}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        <select className="form-input" style={{ flex: 'none', width: 160 }} value={filter.niveau}
+          onChange={e => setFilter(f => ({ ...f, niveau: e.target.value }))}>
+          <option value="">Tous niveaux</option>
+          <option value="INFO">INFO</option>
+          <option value="AVERTISSEMENT">AVERTISSEMENT</option>
+          <option value="CRITIQUE">CRITIQUE</option>
+        </select>
+        <input className="form-input" placeholder="Filtrer par action…" style={{ flex: 1 }} value={filter.action}
+          onChange={e => setFilter(f => ({ ...f, action: e.target.value }))} />
+        <button className="btn btn-primary" onClick={() => load(0)}>🔍 Filtrer</button>
+      </div>
+      {loading ? <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+      : logs.length === 0 ? <EmptyState icon="📋" label="Aucun événement d'audit enregistré" />
+      : (
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead>
+              <tr style={{ background: '#f8fafc', borderBottom: '2px solid var(--border)' }}>
+                {['Date/Heure', 'Utilisateur', 'Rôle', 'Action', 'Ressource', 'Niveau', 'IP'].map(h => (
+                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: 11, color: 'var(--gray)', fontWeight: 600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log, i) => {
+                const nc = niveauColor[log.niveau] || { bg: '#f3f4f6', text: '#374151' }
+                return (
+                  <tr key={log.id || i} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'white' : '#fafafa' }}>
+                    <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                      {log.timestamp ? new Date(log.timestamp).toLocaleString('fr-FR') : '—'}
+                    </td>
+                    <td style={{ padding: '8px 12px' }}>{log.email || log.userId || '—'}</td>
+                    <td style={{ padding: '8px 12px' }}>
+                      <span style={{ background: '#f3f4f6', borderRadius: 4, padding: '1px 6px', fontSize: 10 }}>{log.role || '—'}</span>
+                    </td>
+                    <td style={{ padding: '8px 12px', fontWeight: 600 }}>{log.action || '—'}</td>
+                    <td style={{ padding: '8px 12px' }}>{log.ressource || '—'}{log.ressourceId ? ` #${log.ressourceId}` : ''}</td>
+                    <td style={{ padding: '8px 12px' }}>
+                      <span style={{ background: nc.bg, color: nc.text, borderRadius: 4, padding: '1px 7px', fontSize: 10, fontWeight: 600 }}>{log.niveau || '—'}</span>
+                    </td>
+                    <td style={{ padding: '8px 12px', color: 'var(--gray)', fontFamily: 'monospace' }}>{log.ipAddress || '—'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 }}>
+          <button className="btn btn-outline" disabled={page === 0} onClick={() => load(page - 1)} style={{ fontSize: 12 }}>← Préc.</button>
+          <span style={{ padding: '6px 12px', fontSize: 12, color: 'var(--gray)' }}>Page {page + 1} / {totalPages}</span>
+          <button className="btn btn-outline" disabled={page >= totalPages - 1} onClick={() => load(page + 1)} style={{ fontSize: 12 }}>Suiv. →</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── MAIN DirecteurDashboard ────────────────────────────────────────────────
 export function DirecteurDashboard() {
   const { user } = useAuth()
@@ -1616,6 +1881,7 @@ export function DirecteurDashboard() {
     { key: 'medecins', label: '👨‍⚕️ Médecins' },
     { key: 'comptes',  label: '🔑 Comptes' },
     { key: 'rdv',      label: '📅 RDV & Planning' },
+    { key: 'audit',    label: '🔎 Journal d\'audit' },
   ]
 
   return (
@@ -1688,6 +1954,12 @@ export function DirecteurDashboard() {
           <div>
             <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>📅 Rendez-vous & Planning</h2>
             <DirecteurRdvSection />
+          </div>
+        )}
+        {view === 'audit' && (
+          <div>
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>🔎 Journal d'audit</h2>
+            <AuditLogSection />
           </div>
         )}
 

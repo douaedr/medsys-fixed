@@ -45,6 +45,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/patients/**").hasAnyRole("DIRECTEUR", "ADMIN", "MEDECIN")
                 .requestMatchers("/api/v1/patient/**").hasRole("PATIENT")
                 .requestMatchers("/api/v1/directeur/**").hasAnyRole("DIRECTEUR", "ADMIN")
+                .requestMatchers("/api/v1/rdv/**").hasAnyRole("DIRECTEUR", "ADMIN", "MEDECIN", "PERSONNEL")
+                .requestMatchers("/api/v1/notifications/stream").authenticated()
+                .requestMatchers("/api/v1/public/**").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

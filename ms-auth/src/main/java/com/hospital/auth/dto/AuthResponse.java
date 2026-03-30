@@ -11,4 +11,7 @@ public class AuthResponse {
     private String role;
     private Long patientId;
     private Long personnelId;
+    // 2FA : si true, le token est absent et le client doit fournir le code email
+    private Boolean requiresTwoFa;
+    private String twoFaSessionId; // identifiant temporaire (email encodé) pour la 2e étape
 }

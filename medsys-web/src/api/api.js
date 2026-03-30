@@ -26,6 +26,8 @@ export const authApi = {
   changePassword: (data) => AUTH_API.post('/change-password', data),
   verify: (token) => AUTH_API.get(`/verify?token=${token}`),
   me: () => AUTH_API.get('/me'),
+  verify2fa: (email, code) => AUTH_API.post('/2fa/verify', { email, code }),
+  toggle2fa: () => AUTH_API.post('/2fa/toggle'),
 }
 
 export const patientApi = {
@@ -66,7 +68,24 @@ export const patientApi = {
 
   // Rendez-vous
   getRdv: () => PATIENT_API.get('/patient/me/rdv'),
+  prendreRdv: (data) => PATIENT_API.post('/patient/me/rdv', data),
   annulerRdv: (id) => PATIENT_API.put(`/patient/me/rdv/${id}/annuler`),
+
+  // Export RGPD
+  exportRgpd: () => PATIENT_API.get('/patient/me/export-rgpd', { responseType: 'blob' }),
+
+  // Ordonnance QR
+  getOrdonnanceQr: (id) => PATIENT_API.get(`/patient/me/ordonnances/${id}/qrcode`, { responseType: 'blob' }),
+
+  // Partage dossier
+  partagerDossier: (patientId, data) => PATIENT_API.post(`/patients/${patientId}/partager`, data),
+  getMesPartages: (patientId) => PATIENT_API.get(`/patients/${patientId}/partages`),
+
+  // Recherche avancée
+  rechercheAvancee: (params) => PATIENT_API.get('/patients/recherche-avancee', { params }),
+
+  // Notifications SSE (EventSource, handled separately in hook)
+  getNotificationsStream: () => `/api/v1/notifications/stream`,
 }
 
 export const directeurApi = {
@@ -84,4 +103,8 @@ export const adminApi = {
   listByRole: (role) => ADMIN_API.get(`/users/role/${role}`),
   toggleUser: (id) => ADMIN_API.put(`/users/${id}/toggle`),
   deleteUser: (id) => ADMIN_API.delete(`/users/${id}`),
+}
+
+export const auditApi = {
+  getLogs: (params) => PATIENT_API.get('/directeur/audit', { params }),
 }

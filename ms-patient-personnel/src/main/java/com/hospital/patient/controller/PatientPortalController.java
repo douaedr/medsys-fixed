@@ -36,6 +36,7 @@ public class PatientPortalController {
     private final QrCodeService qrCodeService;
     private final PdfService pdfService;
     private final RdvProxyService rdvProxyService;
+    private final ExportRgpdService exportRgpdService;
 
     // ─── Profil ───────────────────────────────────────────────────────────────
 
@@ -253,6 +254,23 @@ public class PatientPortalController {
         if (ok) return ResponseEntity.ok(Map.of("message", "Rendez-vous annulé"));
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("message", "Service rendez-vous indisponible"));
+    }
+
+    // ─── Export RGPD ─────────────────────────────────────────────────────────
+
+    @GetMapping("/me/export-rgpd")
+    public ResponseEntity<byte[]> exportRgpd(
+            @RequestHeader("Authorization") String authHeader) {
+        Long patientId = extractPatientId(authHeader);
+        try {
+            byte[] zip = exportRgpdService.exporterDonneesPatient(patientId);
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("application/zip"))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"mes-donnees-medsys.zip\"")
+                    .body(zip);
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     // ─── Helper ───────────────────────────────────────────────────────────────

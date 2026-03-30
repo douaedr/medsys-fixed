@@ -131,6 +131,16 @@ public class PatientService {
         return patientRepository.search(search, pageable).map(patientMapper::toResponseDTO);
     }
 
+    @Transactional(readOnly = true)
+    public Page<PatientResponseDTO> rechercheAvancee(String nom, String prenom, String ville,
+                                                      Sexe sexe, GroupeSanguin groupeSanguin,
+                                                      Integer ageMin, Integer ageMax,
+                                                      Pageable pageable) {
+        return patientRepository.rechercheAvancee(
+                nom, prenom, ville, sexe, groupeSanguin, ageMin, ageMax, pageable
+        ).map(patientMapper::toResponseDTO);
+    }
+
     // ─── Dossier Médical Complet ──────────────────────────────────────────────
 
     @Transactional(readOnly = true)

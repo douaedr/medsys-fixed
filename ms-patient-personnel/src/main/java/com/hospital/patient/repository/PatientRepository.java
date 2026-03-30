@@ -44,4 +44,23 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
 
     @Query("SELECT YEAR(p.createdAt), MONTH(p.createdAt), COUNT(p) FROM Patient p WHERE p.createdAt >= :since GROUP BY YEAR(p.createdAt), MONTH(p.createdAt) ORDER BY YEAR(p.createdAt), MONTH(p.createdAt)")
     List<Object[]> countByMonth(@Param("since") LocalDateTime since);
+
+    // Recherche avancée multi-critères
+    @Query("SELECT p FROM Patient p WHERE " +
+           "(:nom IS NULL OR LOWER(p.nom) LIKE LOWER(CONCAT('%', :nom, '%'))) AND " +
+           "(:prenom IS NULL OR LOWER(p.prenom) LIKE LOWER(CONCAT('%', :prenom, '%'))) AND " +
+           "(:ville IS NULL OR LOWER(p.ville) = LOWER(:ville)) AND " +
+           "(:sexe IS NULL OR p.sexe = :sexe) AND " +
+           "(:groupeSanguin IS NULL OR p.groupeSanguin = :groupeSanguin) AND " +
+           "(:ageMin IS NULL OR (YEAR(CURRENT_DATE) - YEAR(p.dateNaissance)) >= :ageMin) AND " +
+           "(:ageMax IS NULL OR (YEAR(CURRENT_DATE) - YEAR(p.dateNaissance)) <= :ageMax)")
+    Page<Patient> rechercheAvancee(
+            @Param("nom") String nom,
+            @Param("prenom") String prenom,
+            @Param("ville") String ville,
+            @Param("sexe") Sexe sexe,
+            @Param("groupeSanguin") GroupeSanguin groupeSanguin,
+            @Param("ageMin") Integer ageMin,
+            @Param("ageMax") Integer ageMax,
+            Pageable pageable);
 }

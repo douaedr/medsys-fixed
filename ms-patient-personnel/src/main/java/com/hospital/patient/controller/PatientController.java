@@ -3,6 +3,8 @@ package com.hospital.patient.controller;
 import com.hospital.patient.dto.DossierMedicalDTO;
 import com.hospital.patient.dto.PatientRequestDTO;
 import com.hospital.patient.dto.PatientResponseDTO;
+import com.hospital.patient.enums.GroupeSanguin;
+import com.hospital.patient.enums.Sexe;
 import com.hospital.patient.service.PatientService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -106,5 +108,24 @@ public class PatientController {
     @GetMapping("/{id}/dossier")
     public ResponseEntity<DossierMedicalDTO> getDossierMedical(@PathVariable Long id) {
         return ResponseEntity.ok(patientService.getDossierMedical(id));
+    }
+
+    // ─── GET /api/v1/patients/recherche-avancee ───────────────────────────────
+    @Operation(summary = "Recherche avancée multi-critères")
+    @GetMapping("/recherche-avancee")
+    public ResponseEntity<Page<PatientResponseDTO>> rechercheAvancee(
+            @RequestParam(required = false) String nom,
+            @RequestParam(required = false) String prenom,
+            @RequestParam(required = false) String ville,
+            @RequestParam(required = false) Sexe sexe,
+            @RequestParam(required = false) GroupeSanguin groupeSanguin,
+            @RequestParam(required = false) Integer ageMin,
+            @RequestParam(required = false) Integer ageMax,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        Pageable pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(patientService.rechercheAvancee(
+                nom, prenom, ville, sexe, groupeSanguin, ageMin, ageMax, pageable));
     }
 }

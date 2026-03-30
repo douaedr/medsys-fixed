@@ -42,6 +42,27 @@ public class EmailService {
         }
     }
 
+    public void sendTwoFaCode(String to, String nom, String code) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(fromEmail);
+            message.setTo(to);
+            message.setSubject("MedSys — Code de vérification");
+            message.setText(
+                "Bonjour " + nom + ",\n\n" +
+                "Votre code de vérification à usage unique :\n\n" +
+                "    " + code + "\n\n" +
+                "Ce code est valable 10 minutes.\n" +
+                "Si vous n'avez pas tenté de vous connecter, changez votre mot de passe immédiatement.\n\n" +
+                "Cordialement,\nL'équipe MedSys"
+            );
+            mailSender.send(message);
+            log.info("Code 2FA envoyé à {}", to);
+        } catch (Exception e) {
+            log.error("Erreur envoi code 2FA à {} : {}", to, e.getMessage());
+        }
+    }
+
     public void sendAccountCreatedEmail(String to, String nom, String tempPassword) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
