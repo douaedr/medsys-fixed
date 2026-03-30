@@ -22,3 +22,19 @@ export const shadow = {
   sm: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
   md: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 4 },
 }
+
+// Objet `theme` unifié pour les nouveaux écrans
+export const theme = {
+  primary: colors.primary,
+  primaryDark: colors.primaryDark,
+  success: colors.success,
+  danger: colors.danger,
+  warning: colors.warning,
+  gray: colors.gray,
+  dark: colors.dark,
+  border: colors.border,
+  bg: colors.bg,
+  shadow,
+  radius,
+}
+

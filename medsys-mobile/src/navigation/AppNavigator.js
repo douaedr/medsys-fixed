@@ -10,27 +10,80 @@ import RegisterScreen from '../screens/RegisterScreen'
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen'
 import HomeScreen from '../screens/HomeScreen'
 import ProfileScreen from '../screens/ProfileScreen'
+import DossierScreen from '../screens/DossierScreen'
+import RendezVousScreen from '../screens/RendezVousScreen'
+import MessagerieScreen from '../screens/MessagerieScreen'
+import DocumentsScreen from '../screens/DocumentsScreen'
 
 const Stack = createNativeStackNavigator()
 const Tab = createBottomTabNavigator()
+
+const HEADER_OPTS = {
+  headerStyle: { backgroundColor: '#1e3a8a' },
+  headerTintColor: 'white',
+  headerTitleStyle: { fontWeight: '800', fontSize: 16 },
+}
 
 function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
-        headerStyle: { backgroundColor: '#1e3a8a' },
-        headerTintColor: 'white',
-        headerTitleStyle: { fontWeight: '800', fontSize: 17 },
+        ...HEADER_OPTS,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.gray,
-        tabBarStyle: { borderTopWidth: 1, borderTopColor: colors.border, paddingBottom: 4 },
-      }}>
-      <Tab.Screen name="Accueil" component={HomeScreen}
-        options={{ tabBarIcon: ({color}) => <Text style={{fontSize:22, color}}>🏠</Text>,
-          headerTitle: '🏥 MedSys — Tableau de bord' }} />
-      <Tab.Screen name="Profil" component={ProfileScreen}
-        options={{ tabBarIcon: ({color}) => <Text style={{fontSize:22, color}}>👤</Text>,
-          headerTitle: '👤 Mon profil' }} />
+        tabBarStyle: { borderTopWidth: 1, borderTopColor: colors.border, paddingBottom: 4, height: 58 },
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
+      }}
+    >
+      <Tab.Screen
+        name="Accueil"
+        component={HomeScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>🏠</Text>,
+          headerTitle: '🏥 MedSys',
+        }}
+      />
+      <Tab.Screen
+        name="Dossier"
+        component={DossierScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>📁</Text>,
+          headerTitle: '📁 Dossier médical',
+        }}
+      />
+      <Tab.Screen
+        name="RendezVous"
+        component={RendezVousScreen}
+        options={{
+          tabBarLabel: 'RDV',
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>📅</Text>,
+          headerTitle: '📅 Mes rendez-vous',
+        }}
+      />
+      <Tab.Screen
+        name="Messagerie"
+        component={MessagerieScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>💬</Text>,
+          headerTitle: '💬 Messagerie',
+        }}
+      />
+      <Tab.Screen
+        name="Documents"
+        component={DocumentsScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>📂</Text>,
+          headerTitle: '📂 Mes documents',
+        }}
+      />
+      <Tab.Screen
+        name="Profil"
+        component={ProfileScreen}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20 }}>👤</Text>,
+          headerTitle: '👤 Mon profil',
+        }}
+      />
     </Tab.Navigator>
   )
 }
