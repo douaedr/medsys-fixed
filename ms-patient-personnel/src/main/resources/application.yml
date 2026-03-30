@@ -47,12 +47,12 @@ management:
         include: health,info,metrics
   endpoint:
     health:
-      show-details: always
+      show-details: when-authorized
 
 logging:
   level:
-    com.hospital.patient: DEBUG
-    org.springframework.web: INFO
+    com.hospital.patient: INFO
+    org.springframework.web: WARN
 
 
 

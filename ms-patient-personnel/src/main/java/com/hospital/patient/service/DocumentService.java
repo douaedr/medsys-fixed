@@ -32,6 +32,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DocumentService {
 
+    private static final long MAX_FILE_SIZE_BYTES = 5L * 1024 * 1024; // 5 MB
+    private static final String MAX_FILE_SIZE_LABEL = "5 MB";
+    private static final String[] ALLOWED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"};
+
     @Value("${app.upload.dir:uploads/patients}")
     private String uploadDir;
 
@@ -49,9 +53,9 @@ public class DocumentService {
             throw new PatientNotFoundException("Dossier médical non trouvé");
         }
 
-        // Validation taille fichier (5 MB max)
-        if (file.getSize() > 5 * 1024 * 1024) {
-            throw new IllegalArgumentException("Fichier trop volumineux. Taille maximale : 5 MB.");
+        // Validation taille fichier
+        if (file.getSize() > MAX_FILE_SIZE_BYTES) {
+            throw new IllegalArgumentException("Fichier trop volumineux. Taille maximale : " + MAX_FILE_SIZE_LABEL + ".");
         }
 
         // Validation type de fichier (PDF, images uniquement)
@@ -164,9 +168,8 @@ public class DocumentService {
     private String getExtension(String filename) {
         if (filename == null || !filename.contains(".")) return "";
         String ext = filename.substring(filename.lastIndexOf(".")).toLowerCase();
-        // N'autoriser que les extensions connues sûres
-        if (ext.matches("\\.(pdf|jpg|jpeg|png|gif|bmp|webp)")) {
-            return ext;
+        for (String allowed : ALLOWED_EXTENSIONS) {
+            if (ext.equals(allowed)) return ext;
         }
         return "";
     }

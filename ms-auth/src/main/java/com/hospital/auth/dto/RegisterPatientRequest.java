@@ -19,20 +19,28 @@ public class RegisterPatientRequest {
 
     // ── Étape 2 : Infos personnelles ──────────────────────────
     @NotBlank(message = "Nom obligatoire")
+    @Size(min = 2, max = 100, message = "Le nom doit avoir entre 2 et 100 caractères")
     private String nom;
 
     @NotBlank(message = "Prénom obligatoire")
+    @Size(min = 2, max = 100, message = "Le prénom doit avoir entre 2 et 100 caractères")
     private String prenom;
 
     @NotBlank(message = "CIN obligatoire")
+    @Size(min = 6, max = 20, message = "CIN invalide (6-20 caractères)")
+    @Pattern(regexp = "^[A-Za-z0-9]+$", message = "CIN ne doit contenir que des lettres et chiffres")
     private String cin;
 
     @NotNull(message = "Date de naissance obligatoire")
+    @Past(message = "La date de naissance doit être dans le passé")
     private LocalDate dateNaissance;
 
     private String sexe;           // MASCULIN / FEMININ
+    @Pattern(regexp = "^[+]?[0-9\\s\\-]{6,20}$", message = "Format téléphone invalide")
     private String telephone;
+    @Size(max = 255, message = "Adresse trop longue")
     private String adresse;
+    @Size(max = 100, message = "Ville trop longue")
     private String ville;
 
     // ── Étape 3 : Infos médicales ─────────────────────────────

@@ -4,6 +4,9 @@ import com.hospital.patient.dto.DossierMedicalDTO;
 import com.hospital.patient.dto.PatientRequestDTO;
 import com.hospital.patient.dto.PatientResponseDTO;
 import com.hospital.patient.service.PatientService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -19,11 +22,13 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/patients")
 @RequiredArgsConstructor
+@Tag(name = "Patients", description = "Gestion des patients (médecins, directeur, admin)")
+@SecurityRequirement(name = "bearerAuth")
 public class PatientController {
 
     private final PatientService patientService;
 
-    // ─── POST /api/v1/patients ───────────────────────────────────────────────
+    @Operation(summary = "Créer un patient")
     @PostMapping
     public ResponseEntity<PatientResponseDTO> createPatient(
             @Valid @RequestBody PatientRequestDTO dto) {
@@ -65,9 +70,14 @@ public class PatientController {
         return ResponseEntity.ok(patientService.getPatientById(id));
     }
 
-    // ─── GET /api/v1/patients/cin/{cin} ─────────────────────────────────────
-    @GetMapping("/cin/{cin}")
-    public ResponseEntity<PatientResponseDTO> getPatientByCin(@PathVariable String cin) {
+    // ─── POST /api/v1/patients/cin-lookup ───────────────────────────────────
+    // Le CIN ne doit pas être exposé dans l'URL (logs, proxies) → envoyé dans le body
+    @PostMapping("/cin-lookup")
+    public ResponseEntity<PatientResponseDTO> getPatientByCin(@RequestBody Map<String, String> body) {
+        String cin = body.get("cin");
+        if (cin == null || cin.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
         return ResponseEntity.ok(patientService.getPatientByCin(cin));
     }
 

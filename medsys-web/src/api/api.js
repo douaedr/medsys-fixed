@@ -31,6 +31,7 @@ export const authApi = {
 export const patientApi = {
   getAll: (params) => PATIENT_API.get('/patients', { params }),
   getById: (id) => PATIENT_API.get(`/patients/${id}`),
+  getByCin: (cin) => PATIENT_API.post('/patients/cin-lookup', { cin }),
   create: (data) => PATIENT_API.post('/patients', data),
   update: (id, data) => PATIENT_API.put(`/patients/${id}`, data),
   delete: (id) => PATIENT_API.delete(`/patients/${id}`),

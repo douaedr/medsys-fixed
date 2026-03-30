@@ -4,6 +4,7 @@ import com.hospital.auth.dto.AuthResponse;
 import com.hospital.auth.dto.CreatePersonnelRequest;
 import com.hospital.auth.entity.UserAccount;
 import com.hospital.auth.enums.Role;
+import com.hospital.auth.exception.AuthException;
 import com.hospital.auth.repository.UserAccountRepository;
 import com.hospital.auth.service.AuthService;
 import jakarta.validation.Valid;
@@ -19,6 +20,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/admin")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
 
     private final AuthService authService;
@@ -46,7 +48,7 @@ public class AdminController {
     @PutMapping("/users/{id}/toggle")
     public ResponseEntity<Map<String, String>> toggleUser(@PathVariable Long id) {
         UserAccount user = userRepo.findById(id)
-                .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+                .orElseThrow(() -> new AuthException("Utilisateur non trouvé"));
         user.setEnabled(!user.isEnabled());
         userRepo.save(user);
         return ResponseEntity.ok(Map.of(
@@ -58,6 +60,9 @@ public class AdminController {
     // DELETE /api/v1/admin/users/{id}
     @DeleteMapping("/users/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+        if (!userRepo.existsById(id)) {
+            throw new AuthException("Utilisateur non trouvé");
+        }
         userRepo.deleteById(id);
         return ResponseEntity.noContent().build();
     }

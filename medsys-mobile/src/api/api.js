@@ -1,9 +1,11 @@
 import axios from 'axios'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-// ⚠️ IMPORTANT : Remplacez par votre IP locale (ipconfig dans cmd)
-const AUTH_BASE = 'http://192.168.1.100:8082/api/v1'
-const PATIENT_BASE = 'http://192.168.1.100:8081/api/v1'
+// Configurer dans .env à la racine du projet mobile :
+// EXPO_PUBLIC_AUTH_URL=http://192.168.1.X:8082/api/v1
+// EXPO_PUBLIC_PATIENT_URL=http://192.168.1.X:8081/api/v1
+const AUTH_BASE = process.env.EXPO_PUBLIC_AUTH_URL || 'http://localhost:8082/api/v1'
+const PATIENT_BASE = process.env.EXPO_PUBLIC_PATIENT_URL || 'http://localhost:8081/api/v1'
 
 const authAxios = axios.create({ baseURL: AUTH_BASE })
 const patientAxios = axios.create({ baseURL: PATIENT_BASE })
