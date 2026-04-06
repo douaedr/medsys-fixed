@@ -77,6 +77,32 @@ export const directeurApi = {
   rdv: (params) => PATIENT_API.get('/directeur/rdv', { params }),
 }
 
+// ── API MedicalAppointments (port 5000) ──────────────────────────────────────
+const RDV_API = axios.create({ baseURL: '/api' })
+
+export const rdvApi = {
+  // Services & médecins
+  getServices:         ()              => RDV_API.get('/services'),
+  getDoctorsByService: (serviceId)     => RDV_API.get(`/services/${serviceId}/doctors`),
+
+  // Créneaux
+  getSlots:       (doctorId, weekStart) => RDV_API.get(`/slots?doctorId=${doctorId}&weekStart=${weekStart}`),
+  isWeekFull:     (doctorId, weekStart) => RDV_API.get(`/slots/week-full?doctorId=${doctorId}&weekStart=${weekStart}`),
+  createBulkSlots: (data)              => RDV_API.post('/slots/bulk', data),
+  blockSlot:       (id)               => RDV_API.put(`/slots/${id}/block`),
+  unblockSlot:     (id)               => RDV_API.put(`/slots/${id}/unblock`),
+
+  // Rendez-vous
+  bookAppointment:    (data)       => RDV_API.post('/appointments', data),
+  cancelAppointment:  (data)       => RDV_API.delete('/appointments', { data }),
+  getMyAppointments:  ()           => RDV_API.get('/appointments/mine'),
+  getAllAppointments:  (doctorId)   => RDV_API.get(`/appointments${doctorId ? `?doctorId=${doctorId}` : ''}`),
+
+  // Liste d'attente
+  joinWaitingList:  (data)        => RDV_API.post('/waiting-list', data),
+  leaveWaitingList: (id, email)   => RDV_API.delete(`/waiting-list/${id}?email=${encodeURIComponent(email)}`),
+}
+
 export const adminApi = {
   createPersonnel: (data) => ADMIN_API.post('/personnel', data),
   listUsers: () => ADMIN_API.get('/users'),

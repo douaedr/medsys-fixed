@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { patientApi, adminApi, directeurApi } from '../api/api'
+import { patientApi, adminApi, directeurApi, rdvApi } from '../api/api'
 
 // ── Navbar partagée ─────────────────────────────────────────────────────────
 function Navbar({ role, notifCount = 0 }) {
@@ -666,6 +666,394 @@ function QrCodeSection({ profil }) {
   )
 }
 
+// ── Calendrier de créneaux (MedicalAppointments) ──────────────────────────
+function SlotCalendar({ doctorId, onSlotSelect }) {
+  const getMonday = (date) => {
+    const d = new Date(date)
+    const day = d.getDay()
+    d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day))
+    d.setHours(0, 0, 0, 0)
+    return d
+  }
+  const [weekStart, setWeekStart] = useState(() => getMonday(new Date()))
+  const [slots, setSlots] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [isFull, setIsFull] = useState(false)
+
+  const weekStartStr = weekStart.toISOString().split('T')[0]
+
+  useEffect(() => {
+    if (!doctorId) return
+    setLoading(true)
+    Promise.all([
+      rdvApi.getSlots(doctorId, weekStartStr),
+      rdvApi.isWeekFull(doctorId, weekStartStr),
+    ])
+      .then(([sr, fr]) => { setSlots(sr.data || []); setIsFull(fr.data?.isFull || false) })
+      .catch(() => { setSlots([]); setIsFull(false) })
+      .finally(() => setLoading(false))
+  }, [doctorId, weekStartStr])
+
+  const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+  const slotsByDay = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(weekStart)
+    date.setDate(date.getDate() + i)
+    const dateStr = date.toDateString()
+    return { date, daySlots: slots.filter(s => new Date(s.startTime).toDateString() === dateStr) }
+  })
+
+  return (
+    <div className="card" style={{ padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <button onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d) }}
+          style={{ padding: '6px 14px', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'white', fontSize: 13 }}>
+          ← Préc.
+        </button>
+        <span style={{ fontWeight: 700, fontSize: 14 }}>
+          Semaine du {weekStart.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+        </span>
+        <button onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d) }}
+          style={{ padding: '6px 14px', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'white', fontSize: 13 }}>
+          Suiv. →
+        </button>
+      </div>
+      {loading
+        ? <div style={{ textAlign: 'center', padding: 32 }}><span className="spinner" /></div>
+        : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+            {slotsByDay.map(({ date, daySlots }, i) => (
+              <div key={i}>
+                <div style={{ textAlign: 'center', padding: '8px 4px', background: '#f8fafc', borderRadius: 8, marginBottom: 6 }}>
+                  <div style={{ fontSize: 10, color: 'var(--gray)', fontWeight: 600, textTransform: 'uppercase' }}>{days[i]}</div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: '#1e293b' }}>{date.getDate()}</div>
+                </div>
+                {daySlots.length === 0
+                  ? <div style={{ textAlign: 'center', fontSize: 11, color: '#d1d5db', padding: 6 }}>—</div>
+                  : daySlots.map(slot => {
+                    const available = slot.status === 'Available'
+                    const time = new Date(slot.startTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+                    return (
+                      <button key={slot.id} disabled={!available} onClick={() => available && onSlotSelect(slot)}
+                        style={{ width: '100%', padding: '5px 2px', marginBottom: 3, border: 'none', borderRadius: 5, fontSize: 11,
+                          cursor: available ? 'pointer' : 'default',
+                          background: available ? '#dcfce7' : '#f3f4f6',
+                          color: available ? '#166534' : '#9ca3af',
+                          fontWeight: available ? 700 : 400 }}>
+                        {time}
+                      </button>
+                    )
+                  })
+                }
+              </div>
+            ))}
+          </div>
+        )
+      }
+      {isFull && (
+        <div style={{ marginTop: 12, background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8, padding: '10px 14px', fontSize: 13 }}>
+          ⚠️ Semaine complète — inscrivez-vous sur la liste d'attente ci-dessous.
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Prise de RDV patient ──────────────────────────────────────────────────
+function PriseRdvSection({ profil }) {
+  const [step, setStep] = useState(1)
+  const [services, setServices] = useState([])
+  const [doctors, setDoctors] = useState([])
+  const [selectedService, setSelectedService] = useState(null)
+  const [selectedDoctor, setSelectedDoctor] = useState(null)
+  const [selectedSlot, setSelectedSlot] = useState(null)
+  const [reason, setReason] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [loadingSvc, setLoadingSvc] = useState(true)
+  const [loadingDoc, setLoadingDoc] = useState(false)
+  const [success, setSuccess] = useState(null)
+  const [error, setError] = useState('')
+  const [showWaiting, setShowWaiting] = useState(false)
+  const [waitingForm, setWaitingForm] = useState({
+    patientName: profil ? `${profil.prenom} ${profil.nom}` : '',
+    email: profil?.email || '',
+    phone: profil?.telephone || '',
+    weekStart: '',
+  })
+
+  useEffect(() => {
+    rdvApi.getServices()
+      .then(r => setServices(r.data || []))
+      .catch(() => setError('Impossible de charger les services. Vérifiez que MedicalAppointments est lancé (port 5000).'))
+      .finally(() => setLoadingSvc(false))
+  }, [])
+
+  const handleSelectService = async (svc) => {
+    setSelectedService(svc); setSelectedDoctor(null); setStep(2); setLoadingDoc(true)
+    try { const r = await rdvApi.getDoctorsByService(svc.id); setDoctors(r.data || []) }
+    catch { setDoctors([]) }
+    finally { setLoadingDoc(false) }
+  }
+
+  const handleBook = async (e) => {
+    e.preventDefault(); setLoading(true); setError('')
+    try {
+      const payload = {
+        timeSlotId: selectedSlot.id,
+        reason,
+        patientName: profil ? `${profil.prenom} ${profil.nom}` : '',
+        patientEmail: profil?.email || '',
+        patientPhone: profil?.telephone || '',
+      }
+      const r = await rdvApi.bookAppointment(payload)
+      setSuccess(r.data); setSelectedSlot(null)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erreur lors de la réservation.')
+    } finally { setLoading(false) }
+  }
+
+  const handleWaiting = async (e) => {
+    e.preventDefault(); setLoading(true)
+    try {
+      await rdvApi.joinWaitingList({ doctorId: selectedDoctor.id, ...waitingForm })
+      setShowWaiting(false)
+      alert('Inscription sur la liste d\'attente confirmée ! Vous serez notifié(e) par email.')
+    } catch (err) {
+      alert(err.response?.data?.message || 'Erreur lors de l\'inscription.')
+    } finally { setLoading(false) }
+  }
+
+  if (success) return (
+    <div className="card" style={{ padding: 32, textAlign: 'center', maxWidth: 480, margin: '0 auto' }}>
+      <div style={{ fontSize: 56, marginBottom: 8 }}>✅</div>
+      <h3 style={{ color: '#16a34a', fontFamily: 'Syne', fontWeight: 700, marginBottom: 16 }}>Rendez-vous confirmé !</h3>
+      <div style={{ background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 18px', marginBottom: 16, textAlign: 'left' }}>
+        <div style={{ fontSize: 14, color: '#1e40af', padding: '4px 0' }}>{selectedService?.icon} {selectedService?.name}</div>
+        <div style={{ fontSize: 14, color: '#1e40af', padding: '4px 0' }}>👨‍⚕️ {selectedDoctor?.fullName}</div>
+        <div style={{ fontSize: 14, color: '#1e40af', padding: '4px 0' }}>
+          📅 {new Date(success.startTime).toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long' })}
+        </div>
+        <div style={{ fontSize: 14, color: '#1e40af', padding: '4px 0' }}>
+          🕐 {new Date(success.startTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+        </div>
+      </div>
+      {success.anonymousToken && (
+        <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', padding: 16, borderRadius: 10, marginBottom: 16 }}>
+          <p style={{ fontWeight: 700, marginBottom: 8 }}>⚠️ Conservez ce code pour annuler :</p>
+          <code style={{ fontSize: 13, wordBreak: 'break-all', color: '#92400e', display: 'block' }}>{success.anonymousToken}</code>
+        </div>
+      )}
+      <button className="btn btn-primary" onClick={() => { setSuccess(null); setStep(1); setSelectedService(null); setSelectedDoctor(null); setReason('') }}>
+        Prendre un autre rendez-vous
+      </button>
+    </div>
+  )
+
+  const stepperItems = [{ n: 1, label: 'Service' }, { n: 2, label: 'Médecin' }, { n: 3, label: 'Créneau' }]
+
+  return (
+    <div>
+      {/* Stepper */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 32 }}>
+        {stepperItems.map(({ n, label }, i) => (
+          <div key={n} style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: step >= n ? '#2563eb' : '#e5e7eb', color: step >= n ? 'white' : '#9ca3af', fontWeight: 700 }}>
+                {step > n ? '✓' : n}
+              </div>
+              <span style={{ fontSize: 12, color: step >= n ? '#2563eb' : '#9ca3af', fontWeight: 600 }}>{label}</span>
+            </div>
+            {i < stepperItems.length - 1 && (
+              <div style={{ width: 60, height: 2, background: step > n ? '#2563eb' : '#e5e7eb', margin: '0 8px', marginBottom: 20 }} />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {error && <div className="alert alert-warning" style={{ marginBottom: 16 }}>⚠️ {error}</div>}
+
+      {/* Étape 1 — Services */}
+      {step === 1 && (
+        <div>
+          <h3 style={{ fontFamily: 'Syne', fontWeight: 700, marginBottom: 6 }}>Choisissez un service médical</h3>
+          <p style={{ color: 'var(--gray)', fontSize: 14, marginBottom: 20 }}>Sélectionnez la spécialité dont vous avez besoin</p>
+          {loadingSvc
+            ? <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+            : services.length === 0
+              ? <EmptyState icon="🏥" label="Aucun service disponible. Vérifiez que MedicalAppointments est lancé sur le port 5000." />
+              : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 14 }}>
+                  {services.map(svc => (
+                    <button key={svc.id} onClick={() => handleSelectService(svc)}
+                      style={{ background: 'white', border: '2px solid var(--border)', borderRadius: 14, padding: '20px 12px',
+                        cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
+                      <span style={{ fontSize: 36 }}>{svc.icon || '🏥'}</span>
+                      <span style={{ fontWeight: 700, color: '#1e3a5f', fontSize: 14 }}>{svc.name}</span>
+                      {svc.description && <span style={{ fontSize: 11, color: 'var(--gray)' }}>{svc.description}</span>}
+                    </button>
+                  ))}
+                </div>
+              )
+          }
+        </div>
+      )}
+
+      {/* Étape 2 — Médecins */}
+      {step === 2 && (
+        <div>
+          <button onClick={() => { setStep(1); setSelectedService(null) }}
+            style={{ padding: '7px 16px', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'white', marginBottom: 16, fontSize: 13 }}>
+            ← Retour
+          </button>
+          <h3 style={{ fontFamily: 'Syne', fontWeight: 700, marginBottom: 4 }}>{selectedService?.icon} {selectedService?.name}</h3>
+          <p style={{ color: 'var(--gray)', fontSize: 14, marginBottom: 20 }}>Choisissez un médecin</p>
+          {loadingDoc
+            ? <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+            : doctors.length === 0
+              ? <EmptyState icon="👨‍⚕️" label="Aucun médecin disponible pour ce service." />
+              : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 540 }}>
+                  {doctors.map(doc => (
+                    <button key={doc.id} onClick={() => { setSelectedDoctor(doc); setStep(3) }}
+                      style={{ background: 'white', border: '2px solid var(--border)', borderRadius: 12, padding: '14px 18px',
+                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left' }}>
+                      <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'linear-gradient(135deg,#2563eb,#1e40af)',
+                        color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>
+                        {doc.fullName?.charAt(0).toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, color: '#1e3a5f' }}>{doc.fullName}</div>
+                        <div style={{ fontSize: 13, color: '#2563eb' }}>{selectedService?.name}</div>
+                        {doc.email && <div style={{ fontSize: 12, color: 'var(--gray)' }}>✉️ {doc.email}</div>}
+                      </div>
+                      <span style={{ color: '#2563eb', fontSize: 18, fontWeight: 700 }}>→</span>
+                    </button>
+                  ))}
+                </div>
+              )
+          }
+        </div>
+      )}
+
+      {/* Étape 3 — Calendrier */}
+      {step === 3 && (
+        <div>
+          <button onClick={() => { setStep(2); setSelectedDoctor(null); setSelectedSlot(null) }}
+            style={{ padding: '7px 16px', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', background: 'white', marginBottom: 16, fontSize: 13 }}>
+            ← Retour
+          </button>
+          <div style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 20px', marginBottom: 20, display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--gray)', fontWeight: 600, textTransform: 'uppercase' }}>Service</div>
+              <div style={{ fontWeight: 700 }}>{selectedService?.icon} {selectedService?.name}</div>
+            </div>
+            <div style={{ width: 1, height: 28, background: 'var(--border)' }} />
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--gray)', fontWeight: 600, textTransform: 'uppercase' }}>Médecin</div>
+              <div style={{ fontWeight: 700 }}>👨‍⚕️ {selectedDoctor?.fullName}</div>
+            </div>
+          </div>
+          <h3 style={{ fontFamily: 'Syne', fontWeight: 700, marginBottom: 6 }}>📅 Créneaux disponibles</h3>
+          <p style={{ color: 'var(--gray)', fontSize: 13, marginBottom: 14 }}>
+            Cliquez sur un créneau <span style={{ color: '#16a34a', fontWeight: 700 }}>vert</span> pour le réserver
+          </p>
+          <SlotCalendar doctorId={selectedDoctor?.id} onSlotSelect={setSelectedSlot} />
+          <button onClick={() => setShowWaiting(true)}
+            style={{ marginTop: 16, padding: '10px 20px', background: '#f59e0b', color: 'white', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+            📋 S'inscrire sur la liste d'attente
+          </button>
+        </div>
+      )}
+
+      {/* Modal confirmation RDV */}
+      {selectedSlot && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', padding: 32, borderRadius: 16, maxWidth: 460, width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 style={{ fontFamily: 'Syne', fontWeight: 700, marginBottom: 16, textAlign: 'center' }}>Confirmer le rendez-vous</h3>
+            <div style={{ background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
+              <div style={{ fontSize: 14, color: '#1e40af', padding: '4px 0' }}>{selectedService?.icon} {selectedService?.name}</div>
+              <div style={{ fontSize: 14, color: '#1e40af', padding: '4px 0' }}>👨‍⚕️ {selectedDoctor?.fullName}</div>
+              <div style={{ fontSize: 14, color: '#1e40af', padding: '4px 0' }}>
+                📅 {new Date(selectedSlot.startTime).toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+              </div>
+              <div style={{ fontSize: 14, color: '#1e40af', padding: '4px 0' }}>
+                🕐 {new Date(selectedSlot.startTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                {' – '}
+                {new Date(selectedSlot.endTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            </div>
+            {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>⚠️ {error}</div>}
+            <form onSubmit={handleBook}>
+              <div className="form-group">
+                <label className="form-label">Motif de la consultation</label>
+                <textarea className="form-input" value={reason} onChange={e => setReason(e.target.value)}
+                  rows={3} placeholder="Optionnel" style={{ resize: 'vertical' }} />
+              </div>
+              {profil && (
+                <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--gray)', marginBottom: 14 }}>
+                  Réservé pour : <strong style={{ color: '#1e293b' }}>{profil.prenom} {profil.nom}</strong>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => { setSelectedSlot(null); setError('') }}
+                  style={{ padding: '10px 20px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                  Annuler
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {loading ? <span className="spinner" /> : '✅ Confirmer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal liste d'attente */}
+      {showWaiting && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', padding: 32, borderRadius: 16, maxWidth: 440, width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ fontFamily: 'Syne', fontWeight: 700, marginBottom: 8 }}>📋 Liste d'attente</h3>
+            <p style={{ color: 'var(--gray)', fontSize: 13, marginBottom: 16 }}>
+              Médecin : <strong>{selectedDoctor?.fullName}</strong>. Vous serez notifié(e) par email dès qu'un créneau se libère.
+            </p>
+            <form onSubmit={handleWaiting}>
+              <div className="form-group">
+                <label className="form-label">Nom complet *</label>
+                <input className="form-input" required value={waitingForm.patientName}
+                  onChange={e => setWaitingForm(f => ({ ...f, patientName: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Email *</label>
+                <input className="form-input" type="email" required value={waitingForm.email}
+                  onChange={e => setWaitingForm(f => ({ ...f, email: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Téléphone</label>
+                <input className="form-input" value={waitingForm.phone}
+                  onChange={e => setWaitingForm(f => ({ ...f, phone: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Semaine souhaitée — choisir un lundi *</label>
+                <input className="form-input" type="date" required value={waitingForm.weekStart}
+                  onChange={e => setWaitingForm(f => ({ ...f, weekStart: e.target.value }))} />
+              </div>
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowWaiting(false)}
+                  style={{ padding: '10px 20px', background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }}>
+                  Annuler
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {loading ? <span className="spinner" /> : '✅ S\'inscrire'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PATIENT DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════
@@ -702,6 +1090,7 @@ export function PatientDashboard() {
   const navItems = [
     { key: 'accueil',    label: '🏠 Accueil' },
     { key: 'dossier',   label: '📁 Dossier médical' },
+    { key: 'prise-rdv', label: '➕ Prendre RDV' },
     { key: 'rdv',       label: '📅 Mes RDV' },
     { key: 'documents', label: '📂 Documents' },
     { key: 'messagerie',label: '💬 Messagerie', badge: notifs.messagesNonLus },
@@ -783,6 +1172,7 @@ export function PatientDashboard() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 14 }}>
               {[
                 { icon: '📁', title: 'Dossier médical', sub: 'Antécédents, consultations', color: '#dbeafe', action: loadDossier },
+                { icon: '➕', title: 'Prendre RDV', sub: 'Réserver un créneau', color: '#ede9fe', action: () => setView('prise-rdv') },
                 { icon: '📅', title: 'Mes RDV', sub: 'Rendez-vous planifiés', color: '#d1fae5', action: () => setView('rdv') },
                 { icon: '🧪', title: 'Mes analyses', sub: 'Résultats laboratoire', color: '#fef3c7', action: loadDossier },
                 { icon: '📂', title: 'Documents', sub: 'Ordonnances, radios…', color: '#ede9fe', action: () => setView('documents') },
@@ -800,6 +1190,12 @@ export function PatientDashboard() {
         )}
 
         {view === 'dossier' && <DossierMedical dossier={dossier} />}
+        {view === 'prise-rdv' && (
+          <div>
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>➕ Prendre un rendez-vous</h2>
+            <PriseRdvSection profil={profil} />
+          </div>
+        )}
         {view === 'rdv' && (
           <div>
             <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>📅 Mes rendez-vous</h2>
@@ -1595,6 +1991,83 @@ function DirecteurRdvSection() {
   )
 }
 
+// ── Section Stats RDV (MedicalAppointments) ───────────────────────────────
+function DirecteurRdvStatsSection() {
+  const [appointments, setAppointments] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setLoading(true)
+    rdvApi.getAllAppointments()
+      .then(r => setAppointments(r.data || []))
+      .catch(() => setError('Service MedicalAppointments non disponible. Démarrez-le sur le port 5000.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const total     = appointments.length
+  const confirmed = appointments.filter(a => a.status === 'Confirmed').length
+  const pending   = appointments.filter(a => a.status === 'Pending').length
+  const cancelled = appointments.filter(a => a.status === 'Cancelled').length
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><span className="spinner" /></div>
+
+  return (
+    <div>
+      {error && (
+        <div className="alert alert-warning" style={{ marginBottom: 16 }}>
+          ⚠️ {error}
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 24 }}>
+        <KpiCard icon="📅" label="Total RDV"  value={total}     color="#2563eb" />
+        <KpiCard icon="✅" label="Confirmés"  value={confirmed} color="#16a34a" />
+        <KpiCard icon="⏳" label="En attente" value={pending}   color="#d97706" />
+        <KpiCard icon="❌" label="Annulés"    value={cancelled} color="#dc2626" />
+      </div>
+      {appointments.length === 0
+        ? <EmptyState icon="📅" label={error ? 'Service indisponible.' : 'Aucun rendez-vous enregistré.'} />
+        : (
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '2px solid var(--border)' }}>
+                  {['Patient', 'Médecin', 'Service', 'Date & Heure', 'Motif', 'Statut'].map(h => (
+                    <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, color: 'var(--gray)', fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {appointments.map((a, i) => {
+                  const sc = { Confirmed: { bg: '#d1fae5', text: '#065f46' }, Pending: { bg: '#fef3c7', text: '#78350f' }, Cancelled: { bg: '#fee2e2', text: '#991b1b' } }[a.status] || { bg: '#f3f4f6', text: '#374151' }
+                  return (
+                    <tr key={a.id} style={{ borderBottom: '1px solid var(--border)', background: i % 2 === 0 ? 'white' : '#fafafa' }}>
+                      <td style={{ padding: '10px 14px', fontWeight: 600 }}>{a.patientName || '—'}</td>
+                      <td style={{ padding: '10px 14px' }}>{a.doctorName || '—'}</td>
+                      <td style={{ padding: '10px 14px' }}>{a.serviceName || '—'}</td>
+                      <td style={{ padding: '10px 14px' }}>
+                        {a.startTime ? new Date(a.startTime).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }) : '—'}
+                        {' '}
+                        {a.startTime ? new Date(a.startTime).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </td>
+                      <td style={{ padding: '10px 14px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {a.reason || '—'}
+                      </td>
+                      <td style={{ padding: '10px 14px' }}>
+                        <span style={{ background: sc.bg, color: sc.text, fontSize: 10, borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>{a.status}</span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </div>
+  )
+}
+
 // ── MAIN DirecteurDashboard ────────────────────────────────────────────────
 export function DirecteurDashboard() {
   const { user } = useAuth()
@@ -1611,11 +2084,12 @@ export function DirecteurDashboard() {
   }, [])
 
   const navItems = [
-    { key: 'stats',    label: '📊 Vue d\'ensemble' },
-    { key: 'patients', label: '👥 Patients' },
-    { key: 'medecins', label: '👨‍⚕️ Médecins' },
-    { key: 'comptes',  label: '🔑 Comptes' },
-    { key: 'rdv',      label: '📅 RDV & Planning' },
+    { key: 'stats',     label: '📊 Vue d\'ensemble' },
+    { key: 'patients',  label: '👥 Patients' },
+    { key: 'medecins',  label: '👨‍⚕️ Médecins' },
+    { key: 'comptes',   label: '🔑 Comptes' },
+    { key: 'rdv',       label: '📅 RDV & Planning' },
+    { key: 'stats-rdv', label: '📈 Stats RDV' },
   ]
 
   return (
@@ -1688,6 +2162,12 @@ export function DirecteurDashboard() {
           <div>
             <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>📅 Rendez-vous & Planning</h2>
             <DirecteurRdvSection />
+          </div>
+        )}
+        {view === 'stats-rdv' && (
+          <div>
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>📈 Statistiques des rendez-vous</h2>
+            <DirecteurRdvStatsSection />
           </div>
         )}
 
