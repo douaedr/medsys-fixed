@@ -1,0 +1,185 @@
+\chapter{Architecture du Système}
+
+\section{Vue d'ensemble}
+
+MedSys adopte une architecture \textbf{microservices hétérogène} : les services
+communiquent via REST (synchrone) et RabbitMQ (asynchrone). Chaque service possède
+sa propre base de données (principe \textit{database per service}).
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[node distance=1.4cm and 1.6cm]
+
+  % ---- Couche Frontend ----
+  \node[draw, thick, rounded corners=6pt, fill=medsysgreen!15,
+        minimum width=11cm, minimum height=1.1cm,
+        align=center, font=\small\bfseries] (web)
+    {medsys-web \quad \textcolor{medsysgray}{\small(React + Vite, port 5173)}};
+
+  % ---- Microservices ----
+  \node[draw, thick, rounded corners=5pt, fill=entitybg,
+        minimum width=2.5cm, minimum height=1.1cm, align=center,
+        font=\small\bfseries, below left=1.6cm and 3.2cm of web] (auth)
+    {ms-auth\\[-2pt]\textcolor{medsysgray}{\tiny port 8082}};
+
+  \node[draw, thick, rounded corners=5pt, fill=entitybg,
+        minimum width=2.5cm, minimum height=1.1cm, align=center,
+        font=\small\bfseries, below=1.6cm of web] (patient)
+    {ms-patient\\[-2pt]\textcolor{medsysgray}{\tiny port 8081}};
+
+  \node[draw, thick, rounded corners=5pt, fill=relbg!60,
+        minimum width=2.5cm, minimum height=1.1cm, align=center,
+        font=\small\bfseries, below right=1.6cm and 0.4cm of web] (rdv)
+    {Medical\\[-2pt]Appointments\\[-2pt]\textcolor{medsysgray}{\tiny port 5000}};
+
+  \node[draw, thick, rounded corners=5pt, fill=medsysgreen!20,
+        minimum width=2.5cm, minimum height=1.1cm, align=center,
+        font=\small\bfseries, right=0.8cm of rdv] (personnel)
+    {ms-personnel\\[-2pt]\textcolor{medsysgray}{\tiny port variable}};
+
+  % ---- Bases de données ----
+  \node[draw, thick, cylinder, shape border rotate=90,
+        fill=gray!15, minimum width=1.6cm, minimum height=0.9cm,
+        align=center, font=\tiny\bfseries,
+        below=1.2cm of auth] (dbauth)
+    {MySQL\\ms\_auth\_db};
+
+  \node[draw, thick, cylinder, shape border rotate=90,
+        fill=gray!15, minimum width=1.6cm, minimum height=0.9cm,
+        align=center, font=\tiny\bfseries,
+        below=1.2cm of patient] (dbpatient)
+    {MySQL\\ms\_patient\_db};
+
+  \node[draw, thick, cylinder, shape border rotate=90,
+        fill=gray!15, minimum width=1.8cm, minimum height=0.9cm,
+        align=center, font=\tiny\bfseries,
+        below=1.2cm of rdv] (dbrdv)
+    {SQL Server\\medical\_appt};
+
+  \node[draw, thick, cylinder, shape border rotate=90,
+        fill=gray!15, minimum width=1.6cm, minimum height=0.9cm,
+        align=center, font=\tiny\bfseries,
+        below=1.2cm of personnel] (dbpers)
+    {MongoDB\\personnel\_db};
+
+  % ---- RabbitMQ ----
+  \node[draw, thick, rounded corners=4pt, fill=orange!20,
+        minimum width=2.2cm, minimum height=0.8cm,
+        align=center, font=\small\bfseries,
+        below=1.2cm of dbauth, xshift=1.5cm] (rmq)
+    {RabbitMQ\\[-2pt]\textcolor{medsysgray}{\tiny port 5672}};
+
+  % ---- Flèches Frontend -> Services ----
+  \draw[-Stealth, thick, medsysblue] (web.south) -- ++(0,-0.5) -|
+    node[near start, above, font=\tiny] {/api} (auth.north);
+  \draw[-Stealth, thick, medsysblue] (web.south) -- ++(0,-0.5) -|
+    node[near start, above, font=\tiny] {/api/v1} (patient.north);
+  \draw[-Stealth, thick, orange!70!red] (web.south) -- ++(0,-0.5) -|
+    node[near start, above, font=\tiny] {/api/appts} (rdv.north);
+  \draw[-Stealth, thick, medsysgreen!60!black] (web.south) -- ++(0,-0.5) -|
+    (personnel.north);
+
+  % ---- Services -> BDD ----
+  \draw[-Stealth, thick, gray] (auth.south) -- (dbauth.north);
+  \draw[-Stealth, thick, gray] (patient.south) -- (dbpatient.north);
+  \draw[-Stealth, thick, gray] (rdv.south) -- (dbrdv.north);
+  \draw[-Stealth, thick, gray] (personnel.south) -- (dbpers.north);
+
+  % ---- RabbitMQ ----
+  \draw[-Stealth, thick, dashed, orange!70] (auth.south) |-
+    node[near end, right, font=\tiny] {events} (rmq.west);
+  \draw[-Stealth, thick, dashed, orange!70] (patient.south) |-
+    (rmq.north);
+
+  % ---- Inter-service ----
+  \draw[Stealth-Stealth, thick, dashed, medsysgray!70] (auth.east) --
+    node[above, font=\tiny] {JWT verify} (patient.west);
+
+\end{tikzpicture}
+\caption{Architecture globale de MedSys}
+\label{fig:architecture}
+\end{figure}
+
+\section{Flux de communication}
+
+\subsection{Communication synchrone (REST/HTTP)}
+
+Tous les échanges frontend $\rightarrow$ backend et inter-services urgents
+utilisent REST sur HTTP/1.1. Le frontend Vite proxifie les requêtes :
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor{tabhead}\color{white}\textbf{Préfixe URL} &
+\color{white}\textbf{Service cible} &
+\color{white}\textbf{Port} \\
+\hline
+\code{/api/v1/auth/**} & ms-auth & 8082 \\
+\rowcolor{roweven}
+\code{/api/v1/patient/**} & ms-patient-personnel & 8081 \\
+\code{/api/v1/patients/**} & ms-patient-personnel & 8081 \\
+\rowcolor{roweven}
+\code{/api/v1/directeur/**} & ms-patient-personnel & 8081 \\
+\code{/api/appointments/**} & MedicalAppointments & 5000 \\
+\rowcolor{roweven}
+\code{/api/slots/**} & MedicalAppointments & 5000 \\
+\code{/api/services/**} & MedicalAppointments & 5000 \\
+\rowcolor{roweven}
+\code{/api/waiting-list/**} & MedicalAppointments & 5000 \\
+\code{/appointmenthub} & MedicalAppointments (SignalR) & 5000 \\
+\hline
+\end{tabular}
+\caption{Table de routage Vite proxy}
+\end{table}
+
+\subsection{Communication asynchrone (RabbitMQ)}
+
+Les événements métier critiques (inscription patient, création de RDV,
+annulation) sont publiés sur l'exchange \code{medsys.exchange} de RabbitMQ.
+Les consommateurs s'abonnent aux queues correspondantes :
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor{tabhead}\color{white}\textbf{Événement} &
+\color{white}\textbf{Producteur} &
+\color{white}\textbf{Consommateur} \\
+\hline
+\code{patient.registered} & ms-auth & ms-patient-personnel \\
+\rowcolor{roweven}
+\code{appointment.created} & ms-patient-personnel & -- \\
+\code{appointment.cancelled} & ms-patient-personnel & -- \\
+\rowcolor{roweven}
+\code{notification.send} & ms-patient-personnel & -- \\
+\hline
+\end{tabular}
+\caption{Événements RabbitMQ}
+\end{table}
+
+\subsection{Temps réel (SignalR)}
+
+Le service MedicalAppointments expose un hub SignalR sur
+\code{/appointmenthub}. Lorsqu'un créneau est libéré (annulation),
+tous les clients connectés reçoivent une notification en temps réel,
+déclenchant un rafraîchissement automatique du calendrier.
+
+\section{Sécurité transversale}
+
+\begin{itemize}[itemsep=4pt]
+  \item \textbf{JWT HS256} : token d'accès (15 min) + refresh token (7 jours),
+    stocké en \code{sessionStorage} côté client.
+  \item \textbf{RBAC} : 5 rôles hiérarchiques — PATIENT, MÉDECIN, PERSONNEL,
+    ADMIN, DIRECTEUR. Chaque endpoint est protégé par \code{@PreAuthorize}
+    (Spring) ou \code{[Authorize(Roles="...")]} (.NET).
+  \item \textbf{Brute-force protection} : \code{LoginRateLimiter} dans ms-auth,
+    blocage après 5 tentatives échouées (fenêtre 15 min).
+  \item \textbf{Audit logs} : chaque action sensible (connexion, création de
+    compte, changement de mot de passe) est tracée dans la table
+    \code{audit\_logs}.
+  \item \textbf{CORS} : origines autorisées limitées à
+    \code{localhost:5173} et \code{localhost:3000}.
+\end{itemize}

@@ -1,196 +1,525 @@
-\chapter{Modelisation Merise}
+\chapter{Modélisation Merise}
 
 \section{Introduction}
 
-La methode Merise permet de modeliser les donnees du systeme a travers trois niveaux
-d'abstraction : conceptuel (MCD), logique (MLD) et physique (MPD). Notre systeme MedSys
-etant base sur une architecture microservices, nous presentons la modelisation pour chaque
-microservice separement.
+La méthode Merise structure la modélisation des données en trois niveaux d'abstraction.
+MedSys étant basé sur une architecture microservices, chaque service possède son propre
+modèle de données indépendant.
 
-% ============================================
-\section{Modele Conceptuel de Donnees (MCD)}
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor{tabhead}\color{white}\textbf{Niveau} &
+\color{white}\textbf{Modèle} &
+\color{white}\textbf{Objectif} \\
+\hline
+Conceptuel & MCD & Quoi stocker ? Entités et associations métier \\
+\rowcolor{roweven}
+Logique    & MLD & Comment organiser ? Tables et clés étrangères \\
+Physique   & MPD & Comment implémenter ? SQL CREATE TABLE \\
+\hline
+\end{tabular}
+\caption{Les trois niveaux de la méthode Merise}
+\end{table}
 
-\subsection{MCD -- Microservice ms-auth}
+\section{Modèle Conceptuel de Données (MCD)}
+
+\subsection{MCD -- ms-auth}
 
 \begin{figure}[H]
-  \centering
-  \includegraphics[width=0.6\textwidth]{figures/mcd_auth}
-  \caption{MCD du microservice ms-auth}
-  \label{fig:mcd_auth}
+\centering
+\begin{tikzpicture}
+
+  \node[mcde] (ua) {USER\_ACCOUNT};
+  \node[draw, fill=attrbg, below=0 of ua, text width=3.6cm,
+        align=left, font=\tiny, inner sep=5pt] {
+    \underline{id} : INT (PK)\\
+    email : VARCHAR(200)\\
+    passwordHash : VARCHAR\\
+    nom, prenom, cin\\
+    role : ENUM(5 rôles)\\
+    enabled, emailVerified\\
+    refreshToken\\
+    patientId, personnelId\\
+    createdAt : DATETIME
+  };
+
+  \node[mcde, right=5.5cm of ua] (al) {AUDIT\_LOG};
+  \node[draw, fill=attrbg, below=0 of al, text width=3.6cm,
+        align=left, font=\tiny, inner sep=5pt] {
+    \underline{id} : INT (PK)\\
+    userId : INT (FK)\\
+    action : VARCHAR(100)\\
+    detail : TEXT\\
+    ipAddress : VARCHAR(45)\\
+    createdAt : DATETIME
+  };
+
+  \node[mcdr] (gen) at ([xshift=2.8cm]ua.east) {GÉNÈRE};
+
+  \draw[thick, medsysblue] (ua.east) -- (gen.west)
+    node[midway, above, card] {0,1};
+  \draw[thick, medsysblue] (gen.east) -- (al.west)
+    node[midway, above, card] {0,n};
+
+\end{tikzpicture}
+\caption{MCD -- ms-auth}
 \end{figure}
 
-Le microservice d'authentification repose sur une entite centrale
-\texttt{USER\_ACCOUNT} qui centralise les informations de connexion
-et les references vers les entites metier des autres microservices
-(\texttt{patientId} vers ms-patient, \texttt{personnelId} vers ms-personnel).
+\noindent\textbf{Description :} \texttt{USER\_ACCOUNT} centralise tous les comptes
+quels que soient les rôles. Les \texttt{AUDIT\_LOG} tracent les actions sensibles
+(connexion, reset mot de passe, création de compte).
 
-\subsection{MCD -- Microservice ms-patient-personnel}
+\subsection{MCD -- ms-patient-personnel}
 
 \begin{figure}[H]
-  \centering
-  \includegraphics[width=\textwidth]{figures/mcd_patient}
-  \caption{MCD du microservice ms-patient-personnel}
-  \label{fig:mcd_patient}
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+
+  \node[mcde] (pat) {PATIENT};
+  \node[draw, fill=attrbg, below=0 of pat, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, cin, nom, prenom\\
+    dateNaissance, sexe\\
+    groupeSanguin, telephone\\
+    email, ville, mutuelle
+  };
+
+  \node[mcde, right=3.5cm of pat] (dos) {DOSSIER\_MEDICAL};
+  \node[draw, fill=attrbg, below=0 of dos, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, patientId (FK)\\
+    numeroDossier\\
+    dateCreation, observations
+  };
+
+  \node[mcde, right=3.5cm of dos] (con) {CONSULTATION};
+  \node[draw, fill=attrbg, below=0 of con, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, dossierId (FK)\\
+    medecinId (FK)\\
+    dateConsultation, motif\\
+    diagnostic, traitement\\
+    poids, temperature
+  };
+
+  \node[mcde, below=4cm of dos] (ord) {ORDONNANCE};
+  \node[draw, fill=attrbg, below=0 of ord, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, dossierId (FK)\\
+    medecinId (FK)\\
+    dateOrdonnance, type\\
+    instructions
+  };
+
+  \node[mcde, below=4cm of pat] (doc) {DOCUMENT\_PATIENT};
+  \node[draw, fill=attrbg, below=0 of doc, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, patientId (FK)\\
+    typeDocument\\
+    nomFichier, taille\\
+    dateUpload
+  };
+
+  \node[mcde, below=4cm of con] (ana) {ANALYSE\_LABO};
+  \node[draw, fill=attrbg, below=0 of ana, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, dossierId (FK)\\
+    typeAnalyse, laboratoire\\
+    statut, resultats\\
+    dateAnalyse
+  };
+
+  \node[mcde, above=1.2cm of dos] (med) {MEDECIN};
+  \node[draw, fill=attrbg, below=0 of med, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, matricule\\
+    nom, prenom, email\\
+    specialiteId, serviceId
+  };
+
+  \node[mcdr] (poss) at ([xshift=1.75cm]pat.east) {POSSÈDE};
+  \node[mcdr] (cont) at ([xshift=1.75cm]dos.east) {CONTIENT};
+  \node[mcdr] (incl) at ([yshift=-2cm]dos.south) {INCLUT};
+  \node[mcdr] (dep)  at ([yshift=-2cm]pat.south)  {DÉPOSE};
+  \node[mcdr] (real) at ([yshift=0.5cm]dos.north) {RÉALISE};
+
+  \draw[thick, medsysblue] (pat.east) -- (poss.west) node[midway,above,card]{1,1};
+  \draw[thick, medsysblue] (poss.east) -- (dos.west) node[midway,above,card]{1,1};
+  \draw[thick, medsysblue] (dos.east) -- (cont.west) node[midway,above,card]{1,1};
+  \draw[thick, medsysblue] (cont.east) -- (con.west) node[midway,above,card]{0,n};
+  \draw[thick, medsysblue] (dos.south) -- (incl.north) node[midway,left,card]{1,1};
+  \draw[thick, medsysblue] (incl.east) -- (ana.west) node[midway,below,card]{0,n};
+  \draw[thick, medsysblue] (incl.west) -- (ord.east) node[midway,below,card]{0,n};
+  \draw[thick, medsysblue] (pat.south) -- (dep.north) node[midway,left,card]{1,1};
+  \draw[thick, medsysblue] (dep.east) -- (doc.west) node[midway,below,card]{0,n};
+  \draw[thick, medsysblue] (med.south) -- (real.north) node[midway,right,card]{0,n};
+  \draw[thick, medsysblue] (real.south) -- (dos.north) node[midway,right,card]{0,n};
+
+\end{tikzpicture}
+\caption{MCD -- ms-patient-personnel (entités principales)}
 \end{figure}
 
-Le dossier medical (\texttt{DOSSIER\_MEDICAL}) constitue l'entite centrale du
-microservice patient. Il agrege l'ensemble des informations cliniques a travers
-plusieurs entites specialisees : consultations, antecedents, ordonnances, analyses
-de laboratoire, radiologies, hospitalisations, certificats medicaux, documents
-uploades et messages.
+\begin{infobox}[Entités complémentaires non représentées]
+Pour des raisons de lisibilité : \texttt{RADIOLOGIE}, \texttt{ANTECEDENT},
+\texttt{HOSPITALISATION}, \texttt{CERTIFICAT\_MEDICAL}, \texttt{LIGNE\_ORDONNANCE},
+\texttt{MESSAGE\_PATIENT}, \texttt{FAVORITE\_DOCTOR}, \texttt{SPECIALITE}, \texttt{SERVICE}.
+\end{infobox}
 
-Les cardinalites principales sont :
-\begin{itemize}
-  \item \textbf{PATIENT -- DOSSIER\_MEDICAL} : (1,1) -- (1,1) -- chaque patient possede exactement un dossier medical
-  \item \textbf{DOSSIER\_MEDICAL -- CONSULTATION} : (1,1) -- (0,n) -- un dossier peut contenir zero ou plusieurs consultations
-  \item \textbf{ORDONNANCE -- LIGNE\_ORDONNANCE} : (1,1) -- (1,n) -- une ordonnance contient au moins une ligne
-  \item \textbf{MEDECIN -- SPECIALITE} : (0,n) -- (1,1) -- un medecin appartient a une specialite
-\end{itemize}
+\subsection{MCD -- MedicalAppointments}
 
-% ============================================
-\section{Modele Logique de Donnees (MLD)}
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
 
-Le MLD traduit le MCD en tables relationnelles en introduisant les cles primaires,
-cles etrangeres et contraintes d'integrite.
+  \node[mcde] (usr) {USERS};
+  \node[draw, fill=attrbg, below=0 of usr, text width=3.2cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, fullName, email\\
+    phone, passwordHash\\
+    role : Doctor/Patient/Secretary\\
+    isRegistered, penaltyUntil\\
+    cancelCount, createdAt
+  };
+
+  \node[mcde, right=3.8cm of usr] (ts) {TIME\_SLOTS};
+  \node[draw, fill=attrbg, below=0 of ts, text width=3.2cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, doctorId (FK)\\
+    startTime, endTime\\
+    status : Available/Reserved/\\
+    \quad Cancelled/Blocked
+  };
+
+  \node[mcde, right=3.8cm of ts] (appt) {APPOINTMENTS};
+  \node[draw, fill=attrbg, below=0 of appt, text width=3.2cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, timeSlotId (FK UNIQUE)\\
+    patientId (FK), bookedById (FK)\\
+    reason, status\\
+    anonymousToken\\
+    cancelledAt, cancelReason
+  };
+
+  \node[mcde, below=4cm of usr] (wl) {WAITING\_LIST};
+  \node[draw, fill=attrbg, below=0 of wl, text width=3.2cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, doctorId (FK)\\
+    weekStartDate : DATE\\
+    patientName, email, phone\\
+    notifiedAt, createdAt
+  };
+
+  \node[mcde, below=4cm of appt] (svc) {SERVICES};
+  \node[draw, fill=attrbg, below=0 of svc, text width=3.2cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id}, name\\
+    description, icon\\
+    createdAt
+  };
+
+  \node[mcdr] (pos) at ([xshift=1.9cm]usr.east) {POSSÈDE};
+  \node[mcdr] (conc) at ([xshift=1.9cm]ts.east) {CONCERNE};
+  \node[mcdr] (ins) at ([yshift=-2cm]usr.south) {S'INSCRIT};
+  \node[mcdr] (prop) at ([yshift=-2cm]ts.south) {PROPOSÉ PAR};
+
+  \draw[thick, medsysblue] (usr.east) -- (pos.west) node[midway,above,card]{1,1};
+  \draw[thick, medsysblue] (pos.east) -- (ts.west) node[midway,above,card]{0,n};
+  \draw[thick, medsysblue] (ts.east) -- (conc.west) node[midway,above,card]{1,1};
+  \draw[thick, medsysblue] (conc.east) -- (appt.west) node[midway,above,card]{0,1};
+  \draw[thick, medsysblue] (usr.south) -- (ins.north) node[midway,left,card]{1,1};
+  \draw[thick, medsysblue] (ins.east) -- (wl.west) node[midway,below,card]{0,n};
+  \draw[thick, medsysblue] (usr.south east) -- (prop.north west) node[near start,right,card]{0,n};
+  \draw[thick, medsysblue] (prop.south east) -- (svc.north west) node[near end,right,card]{0,n};
+
+\end{tikzpicture}
+\caption{MCD -- MedicalAppointments}
+\end{figure}
+
+\subsection{MCD -- ms-personnel}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+
+  \node[mcde] (per) {PERSONNEL};
+  \node[draw, fill=attrbg, below=0 of per, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id} : ObjectId\\
+    matricule, nom, prenom\\
+    cin, email, telephone\\
+    type : Médecin/Infirmier/...\\
+    serviceAffecte
+  };
+
+  \node[mcde, right=3.8cm of per] (plan) {PLANNING};
+  \node[draw, fill=attrbg, below=0 of plan, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id} : ObjectId\\
+    personnelId (ref)\\
+    dateDebut, dateFin\\
+    periodicite, statut
+  };
+
+  \node[mcde, right=3.8cm of plan] (cren) {CRENEAU};
+  \node[draw, fill=attrbg, below=0 of cren, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id} : ObjectId\\
+    medecinId (ref)\\
+    jourSemaine\\
+    heureDebut, heureFin\\
+    typeConsultation
+  };
+
+  \node[mcde, below=4cm of per] (abs) {ABSENCE};
+  \node[draw, fill=attrbg, below=0 of abs, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id} : ObjectId\\
+    personnelId (ref)\\
+    dateDebut, dateFin\\
+    typeAbsence, statut, motif
+  };
+
+  \node[mcde, below=4cm of plan] (equi) {EQUIPE};
+  \node[draw, fill=attrbg, below=0 of equi, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id} : ObjectId\\
+    nom, description\\
+    responsableId (ref)\\
+    membres : [ObjectId]
+  };
+
+  \node[mcde, below=4cm of cren] (dem) {DEMANDE\_MODIF};
+  \node[draw, fill=attrbg, below=0 of dem, text width=3cm,
+        align=left, font=\tiny, inner sep=4pt] {
+    \underline{id} : ObjectId\\
+    demandeurId (ref)\\
+    typeModification\\
+    statut, dateDemande
+  };
+
+  \node[mcdr] (a) at ([xshift=1.9cm]per.east) {A};
+  \node[mcdr] (b) at ([xshift=1.9cm]plan.east) {COMPOSE};
+  \node[mcdr] (c) at ([yshift=-2cm]per.south) {DÉCLARE};
+  \node[mcdr] (d) at ([yshift=-2cm]plan.south) {APPARTIENT};
+  \node[mcdr] (e) at ([yshift=-2cm]cren.south) {FAIT};
+
+  \draw[thick, medsysblue] (per.east) -- (a.west) node[midway,above,card]{1,1};
+  \draw[thick, medsysblue] (a.east) -- (plan.west) node[midway,above,card]{0,n};
+  \draw[thick, medsysblue] (plan.east) -- (b.west) node[midway,above,card]{1,1};
+  \draw[thick, medsysblue] (b.east) -- (cren.west) node[midway,above,card]{0,n};
+  \draw[thick, medsysblue] (per.south) -- (c.north) node[midway,left,card]{1,1};
+  \draw[thick, medsysblue] (c.east) -- (abs.west) node[midway,below,card]{0,n};
+  \draw[thick, medsysblue] (per.south east) -- (d.north west) node[near start,right,card]{0,n};
+  \draw[thick, medsysblue] (d.south west) -- (equi.north east) node[near end,right,card]{0,n};
+  \draw[thick, medsysblue] (cren.south) -- (e.north) node[midway,left,card]{1,1};
+  \draw[thick, medsysblue] (e.south) -- (dem.north) node[midway,left,card]{0,n};
+
+\end{tikzpicture}
+\caption{MCD -- ms-personnel}
+\end{figure}
+
+\section{Modèle Logique de Données (MLD)}
 
 \subsection{MLD -- ms-auth}
-
-\begin{verbatim}
-USER_ACCOUNT (#id, email*, password, role, nom, prenom, cin,
-              enabled, reset_token, reset_token_expiry,
-              patient_id, personnel_id, created_at, updated_at)
-\end{verbatim}
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{USER\_ACCOUNT}(\underline{id}, email, passwordHash, nom, prenom, cin, role, enabled, emailVerified, refreshToken, refreshTokenExpiry, patientId, personnelId, createdAt)
+  \item \textbf{AUDIT\_LOG}(\underline{id}, \textit{\#userId} $\to$ USER\_ACCOUNT, action, detail, ipAddress, userAgent, createdAt)
+\end{itemize}
 
 \subsection{MLD -- ms-patient-personnel}
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{PATIENT}(\underline{id}, cin, nom, prenom, dateNaissance, sexe, groupeSanguin, telephone, email, ville, mutuelle, numeroDossier)
+  \item \textbf{MEDECIN}(\underline{id}, matricule, nom, prenom, \textit{\#specialiteId}, \textit{\#serviceId}, email)
+  \item \textbf{DOSSIER\_MEDICAL}(\underline{id}, \textit{\#patientId} $\to$ PATIENT, numeroDossier, dateCreation)
+  \item \textbf{CONSULTATION}(\underline{id}, \textit{\#dossierId}, \textit{\#medecinId}, dateConsultation, motif, diagnostic, traitement, poids, temperature, tensionSystolique, tensionDiastolique)
+  \item \textbf{ORDONNANCE}(\underline{id}, \textit{\#dossierId}, \textit{\#medecinId}, dateOrdonnance, typeOrdonnance, instructions)
+  \item \textbf{LIGNE\_ORDONNANCE}(\underline{id}, \textit{\#ordonnanceId}, medicament, dosage, dureeJours, posologie)
+  \item \textbf{ANALYSE\_LABO}(\underline{id}, \textit{\#dossierId}, typeAnalyse, laboratoire, statut, resultats, dateAnalyse)
+  \item \textbf{RADIOLOGIE}(\underline{id}, \textit{\#dossierId}, typeExamen, description, conclusion, dateExamen)
+  \item \textbf{ANTECEDENT}(\underline{id}, \textit{\#dossierId}, typeAntecedent, description, dateDiagnostic, severite)
+  \item \textbf{DOCUMENT\_PATIENT}(\underline{id}, \textit{\#patientId}, typeDocument, nomFichier, cheminFichier, taille, dateUpload)
+  \item \textbf{MESSAGE\_PATIENT}(\underline{id}, \textit{\#patientId}, \textit{\#medecinId}, contenu, expediteur, lu, dateEnvoi)
+  \item \textbf{FAVORITE\_DOCTOR}(\underline{id}, \textit{\#patientId}, \textit{\#medecinId}, dateAjout)
+  \item \textbf{SPECIALITE}(\underline{id}, nom, description)
+  \item \textbf{SERVICE}(\underline{id}, nom, description, \textit{\#chefServiceId})
+\end{itemize}
 
-\begin{verbatim}
-SPECIALITE      (#id, nom*, code*)
-SERVICE         (#id, nom, code*, description, localisation, capacite_lits)
+\subsection{MLD -- MedicalAppointments}
+\begin{itemize}[itemsep=2pt]
+  \item \textbf{USERS}(\underline{id}, fullName, email, phone, passwordHash, role, isRegistered, penaltyUntil, cancelCount, createdAt)
+  \item \textbf{TIME\_SLOTS}(\underline{id}, \textit{\#doctorId} $\to$ USERS, startTime, endTime, status, UNIQUE(doctorId, startTime))
+  \item \textbf{APPOINTMENTS}(\underline{id}, \textit{\#timeSlotId}(UNIQUE), \textit{\#patientId} $\to$ USERS, \textit{\#bookedById} $\to$ USERS, reason, status, anonymousToken, cancelledAt, cancelReason)
+  \item \textbf{WAITING\_LIST}(\underline{id}, \textit{\#doctorId}, weekStartDate, patientName, email, phone, notifiedAt, UNIQUE(doctorId, weekStartDate, email))
+  \item \textbf{SERVICES}(\underline{id}, name, description, icon, createdAt)
+  \item \textbf{DOCTOR\_SERVICES}(\textit{\#doctorId}, \textit{\#serviceId}, PK composite)
+  \item \textbf{NOTIFICATIONS}(\underline{id}, recipientEmail, subject, body, sentAt, status)
+  \item \textbf{AUDIT\_LOGS}(\underline{id}, \textit{\#userId}, action, entityType, entityId, detail, createdAt)
+\end{itemize}
 
-MEDECIN         (#id, nom, prenom, matricule,
-                 #specialite_id => SPECIALITE,
-                 #service_id => SERVICE,
-                 derniere_synchronisation)
+\section{Modèle Physique de Données (MPD)}
 
-PATIENT         (#id, nom, prenom, cin*, date_naissance, sexe,
-                 groupe_sanguin, telephone, email, adresse, ville,
-                 mutuelle, numero_cnss,
-                 #dossier_medical_id => DOSSIER_MEDICAL,
-                 created_at, updated_at)
+\subsection{MPD -- ms-auth (MySQL)}
 
-DOSSIER_MEDICAL (#id, numero_dossier*, date_creation)
-
-CONSULTATION    (#id, #dossier_id => DOSSIER_MEDICAL,
-                 #medecin_id => MEDECIN,
-                 date_consultation, motif, diagnostic,
-                 observations, traitement, poids, taille,
-                 tension_systolique, tension_diastolique, temperature)
-
-ANTECEDENT      (#id, #dossier_id => DOSSIER_MEDICAL,
-                 type_antecedent, description, date_diagnostic,
-                 severite, actif, source)
-
-ORDONNANCE      (#id, #dossier_id => DOSSIER_MEDICAL,
-                 #medecin_id => MEDECIN,
-                 date_ordonnance, type_ordonnance, instructions,
-                 est_renouvele, date_expiration)
-
-LIGNE_ORDONNANCE(#id, #ordonnance_id => ORDONNANCE,
-                 medicament, dosage, posologie,
-                 duree_jours, quantite, instructions)
-
-ANALYSE_LABORATOIRE(#id, #dossier_id => DOSSIER_MEDICAL,
-                    date_analyse, date_resultat, type_analyse,
-                    resultats, valeur_reference, statut, severite,
-                    laboratoire, prescripteur, chemin_fichier)
-
-RADIOLOGIE      (#id, #dossier_id => DOSSIER_MEDICAL,
-                 date_examen, type_examen, description,
-                 conclusion, prescripteur, radiologue)
-
-HOSPITALISATION (#id, #dossier_id => DOSSIER_MEDICAL,
-                 #service_id => SERVICE,
-                 #medecin_responsable_id => MEDECIN,
-                 date_entree, date_sortie, motif, diagnostic,
-                 numero_chambre, compte_rendu, actif)
-
-CERTIFICAT_MEDICAL(#id, #dossier_id => DOSSIER_MEDICAL,
-                   #medecin_id => MEDECIN,
-                   type_certificat, date_emission,
-                   contenu, duree_jours)
-
-DOCUMENT_PATIENT(#id, #dossier_id => DOSSIER_MEDICAL,
-                 type_document, nom_fichier_original,
-                 nom_fichier_stocke, chemin_fichier,
-                 description, taille_fichier, content_type,
-                 date_upload)
-
-MESSAGE_PATIENT (#id, #dossier_id => DOSSIER_MEDICAL,
-                 contenu, expediteur, lu,
-                 medecin_id, medecin_nom, date_envoi)
-\end{verbatim}
-
-\textbf{Conventions :} \texttt{\#} = cle primaire, \texttt{*} = contrainte d'unicite, \texttt{=>} = cle etrangere.
-
-% ============================================
-\section{Modele Physique de Donnees (MPD)}
-
-Le MPD correspond aux scripts SQL de creation des tables. Le script complet est
-disponible dans le fichier \texttt{docs/sql/mpd.sql}.
-
-\subsection{Tables principales -- ms\_auth\_db}
-
-\begin{lstlisting}[caption=Table user\_accounts]
+\begin{lstlisting}[style=sql, caption={Tables ms-auth}]
 CREATE TABLE user_accounts (
-    id        BIGINT AUTO_INCREMENT PRIMARY KEY,
-    email     VARCHAR(255) NOT NULL UNIQUE,
-    password  VARCHAR(255) NOT NULL,
-    role      ENUM('PATIENT','MEDECIN','ADMIN',
-                   'PERSONNEL','DIRECTEUR') NOT NULL,
-    nom       VARCHAR(255) NOT NULL,
-    prenom    VARCHAR(255) NOT NULL,
-    cin       VARCHAR(50),
-    enabled   BOOLEAN DEFAULT TRUE,
-    ...
+  id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+  email            VARCHAR(200) NOT NULL UNIQUE,
+  password_hash    VARCHAR(255) NOT NULL,
+  nom              VARCHAR(100),
+  prenom           VARCHAR(100),
+  cin              VARCHAR(20),
+  role             ENUM('PATIENT','MEDECIN','PERSONNEL','ADMIN','DIRECTEUR')
+                   NOT NULL DEFAULT 'PATIENT',
+  enabled          BOOLEAN NOT NULL DEFAULT FALSE,
+  email_verified   BOOLEAN NOT NULL DEFAULT FALSE,
+  refresh_token    VARCHAR(512),
+  refresh_token_expiry DATETIME,
+  patient_id       BIGINT,
+  personnel_id     BIGINT,
+  created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE audit_logs (
+  id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id     BIGINT REFERENCES user_accounts(id) ON DELETE SET NULL,
+  action      VARCHAR(100) NOT NULL,
+  detail      TEXT,
+  ip_address  VARCHAR(45),
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+\end{lstlisting}
+
+\subsection{MPD -- MedicalAppointments (SQL Server)}
+
+\begin{lstlisting}[style=sql, caption={Tables MedicalAppointments}]
+CREATE TABLE Users (
+  Id           INT IDENTITY PRIMARY KEY,
+  FullName     NVARCHAR(150) NOT NULL,
+  Email        NVARCHAR(200) NOT NULL UNIQUE,
+  Phone        NVARCHAR(20),
+  PasswordHash NVARCHAR(255),
+  Role         NVARCHAR(20) NOT NULL DEFAULT 'Patient',
+  IsRegistered BIT NOT NULL DEFAULT 0,
+  PenaltyUntil DATETIME2 NULL,
+  CancelCount  INT NOT NULL DEFAULT 0,
+  CreatedAt    DATETIME2 NOT NULL DEFAULT GETDATE()
+);
+CREATE TABLE TimeSlots (
+  Id        INT IDENTITY PRIMARY KEY,
+  DoctorId  INT NOT NULL REFERENCES Users(Id) ON DELETE CASCADE,
+  StartTime DATETIME2 NOT NULL,
+  EndTime   DATETIME2 NOT NULL,
+  Status    NVARCHAR(20) NOT NULL DEFAULT 'Available',
+  CONSTRAINT UQ_Doctor_Slot UNIQUE (DoctorId, StartTime)
+);
+CREATE TABLE Appointments (
+  Id             INT IDENTITY PRIMARY KEY,
+  TimeSlotId     INT NOT NULL UNIQUE REFERENCES TimeSlots(Id),
+  PatientId      INT NOT NULL REFERENCES Users(Id),
+  BookedById     INT NOT NULL REFERENCES Users(Id),
+  Reason         NVARCHAR(500),
+  Status         NVARCHAR(40) NOT NULL DEFAULT 'Confirmed',
+  AnonymousToken NVARCHAR(100) NULL,
+  CancelledAt    DATETIME2 NULL,
+  CancelReason   NVARCHAR(500) NULL,
+  CreatedAt      DATETIME2 NOT NULL DEFAULT GETDATE()
+);
+CREATE TABLE WaitingList (
+  Id            INT IDENTITY PRIMARY KEY,
+  DoctorId      INT NOT NULL REFERENCES Users(Id) ON DELETE CASCADE,
+  WeekStartDate DATE NOT NULL,
+  PatientName   NVARCHAR(150) NOT NULL,
+  Email         NVARCHAR(200) NOT NULL,
+  Phone         NVARCHAR(20),
+  NotifiedAt    DATETIME2 NULL,
+  CreatedAt     DATETIME2 NOT NULL DEFAULT GETDATE(),
+  CONSTRAINT UQ_WaitingList UNIQUE (DoctorId, WeekStartDate, Email)
+);
+CREATE TABLE Services (
+  Id   INT IDENTITY PRIMARY KEY,
+  Name NVARCHAR(150) NOT NULL UNIQUE,
+  Icon NVARCHAR(10)
+);
+CREATE TABLE DoctorServices (
+  DoctorId INT NOT NULL REFERENCES Users(Id) ON DELETE CASCADE,
+  ServiceId INT NOT NULL REFERENCES Services(Id) ON DELETE CASCADE,
+  PRIMARY KEY (DoctorId, ServiceId)
 );
 \end{lstlisting}
 
-\subsection{Tables principales -- ms\_patient\_db}
+\subsection{MPD -- ms-patient-personnel (MySQL, extrait)}
 
-\begin{lstlisting}[caption=Table patients]
+\begin{lstlisting}[style=sql, caption={Tables principales ms-patient-personnel}]
 CREATE TABLE patients (
-    id                 BIGINT AUTO_INCREMENT PRIMARY KEY,
-    cin                VARCHAR(50) NOT NULL UNIQUE,
-    nom                VARCHAR(255) NOT NULL,
-    prenom             VARCHAR(255) NOT NULL,
-    date_naissance     DATE NOT NULL,
-    dossier_medical_id BIGINT UNIQUE,
-    FOREIGN KEY (dossier_medical_id)
-        REFERENCES dossiers_medicaux(id)
-);
-\end{lstlisting}
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  cin            VARCHAR(20) NOT NULL UNIQUE,
+  nom            VARCHAR(100) NOT NULL,
+  prenom         VARCHAR(100) NOT NULL,
+  date_naissance DATE,
+  sexe           ENUM('MASCULIN','FEMININ') NOT NULL,
+  groupe_sanguin VARCHAR(10),
+  telephone      VARCHAR(20),
+  email          VARCHAR(200),
+  ville          VARCHAR(100),
+  mutuelle       VARCHAR(100),
+  numero_dossier VARCHAR(20) UNIQUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-\begin{lstlisting}[caption=Table dossiers\_medicaux]
 CREATE TABLE dossiers_medicaux (
-    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
-    numero_dossier  VARCHAR(50) NOT NULL UNIQUE,
-    date_creation   DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-\end{lstlisting}
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  patient_id     BIGINT NOT NULL UNIQUE
+                 REFERENCES patients(id) ON DELETE CASCADE,
+  numero_dossier VARCHAR(20) NOT NULL UNIQUE,
+  date_creation  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  observations   TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-\begin{lstlisting}[caption=Table consultations]
 CREATE TABLE consultations (
-    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
-    dossier_id          BIGINT NOT NULL,
-    medecin_id          BIGINT,
-    date_consultation   DATETIME NOT NULL,
-    motif               VARCHAR(500),
-    diagnostic          TEXT,
-    FOREIGN KEY (dossier_id)
-        REFERENCES dossiers_medicaux(id),
-    FOREIGN KEY (medecin_id)
-        REFERENCES medecins_ref(id)
-);
-\end{lstlisting}
+  id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+  dossier_id          BIGINT NOT NULL
+                      REFERENCES dossiers_medicaux(id) ON DELETE CASCADE,
+  medecin_id          BIGINT REFERENCES medecins(id),
+  date_consultation   DATETIME NOT NULL,
+  motif               TEXT,
+  diagnostic          TEXT,
+  traitement          TEXT,
+  poids               DECIMAL(5,2),
+  temperature         DECIMAL(4,1),
+  tension_systolique  INT,
+  tension_diastolique INT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-\textit{Le script SQL complet avec toutes les tables est disponible dans \texttt{docs/sql/mpd.sql}.}
+CREATE TABLE ordonnances (
+  id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+  dossier_id       BIGINT NOT NULL
+                   REFERENCES dossiers_medicaux(id) ON DELETE CASCADE,
+  medecin_id       BIGINT REFERENCES medecins(id),
+  date_ordonnance  DATE NOT NULL,
+  type_ordonnance  ENUM('SIMPLE','RENOUVELABLE','LONGUE_DUREE') NOT NULL,
+  instructions     TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE lignes_ordonnance (
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  ordonnance_id BIGINT NOT NULL
+                REFERENCES ordonnances(id) ON DELETE CASCADE,
+  medicament    VARCHAR(200) NOT NULL,
+  dosage        VARCHAR(100),
+  duree_jours   INT,
+  posologie     TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE documents_patients (
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  patient_id    BIGINT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  type_document ENUM('ORDONNANCE','ANALYSE','RADIOLOGIE',
+                     'CERTIFICAT','AUTRE') NOT NULL,
+  nom_fichier   VARCHAR(255) NOT NULL,
+  chemin        VARCHAR(512) NOT NULL,
+  taille        BIGINT,
+  date_upload   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+\end{lstlisting}

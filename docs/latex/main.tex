@@ -1,6 +1,8 @@
 \documentclass[12pt,a4paper]{report}
 
-% ===== PACKAGES =====
+% ===================================================================
+% PACKAGES
+% ===================================================================
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[french]{babel}
@@ -9,72 +11,304 @@
 \usepackage{geometry}
 \usepackage{hyperref}
 \usepackage{caption}
-\usepackage{subcaption}
 \usepackage{booktabs}
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{titlesec}
 \usepackage{fancyhdr}
 \usepackage{longtable}
+\usepackage{tikz}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage{tcolorbox}
+\usepackage{tabularx}
+\usepackage{colortbl}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usetikzlibrary{positioning, shapes, shapes.geometric, arrows.meta,
+                fit, calc, shadows, backgrounds, decorations.pathreplacing}
 
-% ===== MISE EN PAGE =====
-\geometry{
-  top=2.5cm, bottom=2.5cm,
-  left=3cm, right=2.5cm
-}
+% ===================================================================
+% MISE EN PAGE
+% ===================================================================
+\geometry{top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm}
 
-% ===== STYLE CODE SQL =====
-\lstset{
+% ===================================================================
+% COULEURS
+% ===================================================================
+\definecolor{medsysblue}{RGB}{37,99,235}
+\definecolor{medsysdark}{RGB}{30,58,138}
+\definecolor{medsysgreen}{RGB}{5,150,105}
+\definecolor{medsysgray}{RGB}{107,114,128}
+\definecolor{medsyslight}{RGB}{239,246,255}
+\definecolor{entitybg}{RGB}{219,234,254}
+\definecolor{relbg}{RGB}{253,230,138}
+\definecolor{attrbg}{RGB}{248,250,252}
+\definecolor{codebg}{RGB}{248,249,250}
+\definecolor{codegreen}{RGB}{22,101,52}
+\definecolor{codeblue}{RGB}{29,78,216}
+\definecolor{codered}{RGB}{185,28,28}
+\definecolor{colegray}{RGB}{107,114,128}
+\definecolor{tabhead}{RGB}{30,58,138}
+\definecolor{roweven}{RGB}{239,246,255}
+
+% ===================================================================
+% LISTINGS
+% ===================================================================
+\lstdefinestyle{sql}{
   language=SQL,
+  backgroundcolor=\color{codebg},
+  commentstyle=\color{colegray}\itshape,
+  keywordstyle=\color{codeblue}\bfseries,
+  stringstyle=\color{codered},
   basicstyle=\ttfamily\small,
-  keywordstyle=\color{blue}\bfseries,
-  commentstyle=\color{gray},
-  stringstyle=\color{red},
-  frame=single,
   breaklines=true,
-  numbers=left,
-  numberstyle=\tiny\color{gray},
-  tabsize=2,
-  showstringspaces=false
+  frame=single, framesep=4pt, rulecolor=\color{gray!30},
+  numbers=left, numberstyle=\tiny\color{colegray}, numbersep=6pt,
+  tabsize=2, showstringspaces=false,
+  morekeywords={AUTO\_INCREMENT,ENUM,UNIQUE,DEFAULT,REFERENCES,
+                ON,DELETE,CASCADE,ENGINE,CHARSET,COLLATE,COMMENT}
 }
+\lstdefinestyle{java}{
+  language=Java,
+  backgroundcolor=\color{codebg},
+  commentstyle=\color{colegray}\itshape,
+  keywordstyle=\color{codeblue}\bfseries,
+  stringstyle=\color{codered},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single, framesep=4pt, rulecolor=\color{gray!30},
+  numbers=left, numberstyle=\tiny\color{colegray}, numbersep=6pt,
+  tabsize=2
+}
+\lstdefinestyle{plantuml}{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single, framesep=4pt, rulecolor=\color{gray!30},
+  tabsize=2, showstringspaces=false
+}
+\lstset{style=sql}
 
-% ===== EN-TETE / PIED =====
+% ===================================================================
+% EN-TETE / PIED DE PAGE
+% ===================================================================
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\leftmark}
-\fancyhead[R]{MedSys}
-\fancyfoot[C]{\thepage}
+\fancyhead[L]{\small\textcolor{medsysgray}{\leftmark}}
+\fancyhead[R]{\small\textbf{\textcolor{medsysblue}{MedSys}}}
+\fancyfoot[C]{\textcolor{medsysgray}{\thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{medsysblue!30}\leaders\hrule height \headrulewidth\hfill}}
 
-% ===== HYPERLINKS =====
+% ===================================================================
+% TITRES
+% ===================================================================
+\titleformat{\chapter}[block]
+  {\normalfont\Huge\bfseries\color{medsysdark}}
+  {\thechapter.}{0.8em}{}[\vspace{2pt}\color{medsysblue}\hrule]
+\titlespacing*{\chapter}{0pt}{-10pt}{20pt}
+
+\titleformat{\section}
+  {\normalfont\Large\bfseries\color{medsysblue}}
+  {\thesection}{0.8em}{}
+\titleformat{\subsection}
+  {\normalfont\large\bfseries\color{medsysgray!80!black}}
+  {\thesubsection}{0.8em}{}
+\titleformat{\subsubsection}
+  {\normalfont\normalsize\bfseries\color{medsysgray}}
+  {\thesubsubsection}{0.8em}{}
+
+% ===================================================================
+% HYPERLINKS
+% ===================================================================
 \hypersetup{
-  colorlinks=true,
-  linkcolor=blue,
-  urlcolor=blue,
-  citecolor=blue
+  colorlinks=true, linkcolor=medsysblue,
+  urlcolor=medsysblue, citecolor=medsysblue,
+  pdftitle={MedSys -- Rapport de Projet},
+  pdfauthor={Équipe MedSys},
+  pdfsubject={Système de Gestion Hospitalière -- Architecture Microservices}
 }
 
+% ===================================================================
+% TIKZ STYLES GLOBAUX
+% ===================================================================
+\tikzset{
+  % MCD -- entité
+  mcde/.style={
+    draw=medsysblue, thick, rectangle, rounded corners=3pt,
+    fill=entitybg, minimum width=3.6cm, minimum height=0.75cm,
+    align=center, font=\small\bfseries\color{medsysdark},
+    drop shadow={shadow xshift=1pt, shadow yshift=-1pt, opacity=0.2}
+  },
+  % MCD -- relation
+  mcdr/.style={
+    draw=orange!70!red, thick, diamond, fill=relbg,
+    minimum width=2.8cm, aspect=2.2,
+    align=center, font=\scriptsize\bfseries\color{orange!60!black}
+  },
+  % MCD -- cardinalité
+  card/.style={font=\scriptsize\bfseries, color=medsysblue!80!black},
+  % Architecture -- service box
+  svcbox/.style={
+    draw, thick, rounded corners=5pt, fill=#1,
+    minimum width=3.2cm, minimum height=1.2cm,
+    align=center, font=\small\bfseries
+  },
+  % Flèche architecture
+  svcline/.style={-Stealth, thick, color=medsysgray},
+  svcdbline/.style={-Stealth, thick, dashed, color=medsysgray!60}
+}
+
+% ===================================================================
+% TCOLORBOX
+% ===================================================================
+\tcbuselibrary{skins, breakable}
+\newtcolorbox{infobox}[1][]{
+  enhanced, breakable,
+  colback=medsyslight, colframe=medsysblue,
+  fonttitle=\bfseries\small, title={#1},
+  leftrule=4pt, right=4pt, top=4pt, bottom=4pt,
+  arc=3pt
+}
+\newtcolorbox{notebox}{
+  enhanced, colback=yellow!10, colframe=orange!70,
+  leftrule=4pt, arc=3pt, fonttitle=\bfseries\small
+}
+
+% ===================================================================
+% COMMANDES UTILITAIRES
+% ===================================================================
+\newcommand{\port}[1]{\texttt{\small\textcolor{medsysblue}{#1}}}
+\newcommand{\tech}[1]{\textbf{\textcolor{medsysdark}{#1}}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+
+% Tableau centré bleu
+\newcolumntype{H}{>{\columncolor{tabhead}\color{white}\bfseries\small}c}
+\newcolumntype{E}{>{\columncolor{roweven}}l}
+
+% ===================================================================
+% DOCUMENT
+% ===================================================================
 \begin{document}
 
-% ===== PAGE DE GARDE =====
+% -------------------------------------------------------------------
+% PAGE DE GARDE
+% -------------------------------------------------------------------
 \begin{titlepage}
-  \centering
-  \vspace*{2cm}
-  {\Huge\bfseries MedSys\par}
-  \vspace{0.5cm}
-  {\Large Systeme de Gestion des Dossiers Medicaux Hospitaliers\par}
-  \vspace{2cm}
-  {\large Rapport de Conception\par}
-  \vspace{1cm}
-  {\large Modelisation Merise et UML\par}
+  \begin{tikzpicture}[remember picture, overlay]
+    % Fond bleu en haut
+    \fill[medsysdark] (current page.north west) rectangle
+      ([yshift=-9cm]current page.north east);
+    % Bande bleue claire
+    \fill[medsysblue] ([yshift=-9cm]current page.north west) rectangle
+      ([yshift=-9.3cm]current page.north east);
+    % Cercles décoratifs
+    \fill[white, opacity=0.04]
+      ([xshift=5cm, yshift=-4cm]current page.north west) circle (4cm);
+    \fill[white, opacity=0.04]
+      ([xshift=16cm, yshift=-2cm]current page.north west) circle (6cm);
+  \end{tikzpicture}
+
+  \vspace*{1.5cm}
+  \centering\color{white}
+  {\fontsize{64}{70}\selectfont\bfseries MedSys\par}
+  \vspace{0.4cm}
+  {\Large\bfseries Système de Gestion Hospitalière\par}
+  \vspace{0.25cm}
+  {\normalsize Architecture Microservices \textbullet{} Spring Boot \textbullet{} ASP.NET Core \textbullet{} React\par}
+  \vspace{0.8cm}
+
+  \color{black}
+  \vspace{3.5cm}
+
+  \begin{tcolorbox}[enhanced, colback=white, colframe=medsysblue!30,
+    width=14cm, arc=8pt, boxrule=1pt,
+    drop shadow={opacity=0.15}]
+    \centering
+    {\Large\bfseries\color{medsysdark} Rapport de Conception\par}
+    \vspace{0.3cm}
+    {\normalsize Modélisation Merise (MCD / MLD / MPD)\\[4pt]
+     Diagrammes UML (Cas d'utilisation, Classes, Séquences, Composants)\\[4pt]
+     Description technique complète\par}
+  \end{tcolorbox}
+
+  \vspace{1.5cm}
+  \begin{tabular}{cc}
+    \toprule
+    \textbf{Module} & \textbf{Technologie} \\
+    \midrule
+    ms-auth & Java 17 · Spring Boot 3 · MySQL \\
+    ms-patient-personnel & Java 17 · Spring Boot 3 · MySQL \\
+    MedicalAppointments & ASP.NET Core 8 · SQL Server \\
+    ms-personnel & ASP.NET Core 8 · MongoDB \\
+    medsys-web & React 18 · Vite · Axios \\
+    \bottomrule
+  \end{tabular}
+
   \vfill
-  {\large \today\par}
+  {\small\color{medsysgray} Rapport généré le \today\par}
 \end{titlepage}
 
+% -------------------------------------------------------------------
+% RÉSUMÉ
+% -------------------------------------------------------------------
+\chapter*{Résumé}
+\addcontentsline{toc}{chapter}{Résumé}
+
+\begin{infobox}[MedSys en bref]
+\textbf{MedSys} est une plateforme hospitalière complète basée sur une architecture
+microservices hétérogène, intégrant des technologies Java (Spring Boot), .NET
+(ASP.NET Core) et un frontend React unifié. Elle couvre l'ensemble du parcours
+patient : authentification sécurisée, dossier médical électronique, prise de
+rendez-vous, gestion du personnel et notifications en temps réel.
+\end{infobox}
+
+\vspace{0.5cm}
+
+\noindent Le système est organisé autour de cinq modules principaux :
+
+\begin{itemize}[leftmargin=*, itemsep=4pt]
+  \item \tech{ms-auth} (port 8082) : Authentification JWT avec refresh token, protection
+    brute-force, RBAC à 5 rôles (PATIENT, MÉDECIN, PERSONNEL, ADMIN, DIRECTEUR),
+    audit logs, vérification email.
+
+  \item \tech{ms-patient-personnel} (port 8081) : Dossier médical électronique complet —
+    consultations, ordonnances, analyses de laboratoire, radiologies, hospitalisations,
+    certificats médicaux, messagerie médecin-patient, export PDF, QR Code, tableau de bord direction.
+
+  \item \tech{MedicalAppointments} (port 5000) : Prise de rendez-vous en ligne (patient
+    anonyme ou connecté), gestion des créneaux par le médecin (vue semaine, création en masse,
+    blocage), liste d'attente automatique avec notification email, SignalR temps réel.
+
+  \item \tech{ms-personnel} (port variable) : Gestion des ressources humaines hospitalières —
+    médecins, infirmiers, personnels, plannings, absences, équipes, disponibilités,
+    demandes de modification. Base de données MongoDB.
+
+  \item \tech{medsys-web} (port 5173) : Interface React unifiée connectée à tous les
+    microservices via Vite proxy. Tableaux de bord par rôle, prise de RDV intégrée,
+    statistiques direction.
+\end{itemize}
+
+\vspace{0.5cm}
+\noindent\textbf{Mots-clés :} Microservices, Spring Boot, ASP.NET Core, React, JWT, MySQL, MongoDB,
+RabbitMQ, SignalR, Merise, UML.
+
+% -------------------------------------------------------------------
+% TABLE DES MATIÈRES
+% -------------------------------------------------------------------
 \tableofcontents
 \newpage
 
-% ===== CHAPITRES =====
+% -------------------------------------------------------------------
+% CHAPITRES
+% -------------------------------------------------------------------
+\input{introduction}
+\input{architecture}
 \input{merise}
 \input{uml}
+\input{modules}
+\input{conclusion}
 
 \end{document}

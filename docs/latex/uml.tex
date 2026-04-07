@@ -1,233 +1,484 @@
-\chapter{Modelisation UML}
+\chapter{Modélisation UML}
 
 \section{Introduction}
 
-La modelisation UML de MedSys couvre les aspects fonctionnels (cas d'utilisation),
-structurels (diagrammes de classes) et comportementaux (diagrammes de sequence)
-pour chacun des deux microservices principaux.
+La modélisation UML 2.x couvre quatre types de diagrammes pour MedSys :
+les cas d'utilisation (fonctionnel), les classes (structurel),
+les séquences (comportemental) et les composants (architectural).
 
-% ============================================
 \section{Diagrammes de Cas d'Utilisation}
 
 \subsection{ms-auth -- Cas d'utilisation}
 
 \begin{figure}[H]
-  \centering
-  \includegraphics[width=0.9\textwidth]{figures/uc_auth}
-  \caption{Diagramme de cas d'utilisation -- ms-auth}
-  \label{fig:uc_auth}
-\end{figure}
+\centering
+\begin{tikzpicture}[every node/.style={font=\small}]
 
-Le microservice ms-auth expose trois categories de fonctionnalites :
-\begin{itemize}
-  \item \textbf{Authentification publique} : inscription patient, connexion, reinitialisation de mot de passe
-  \item \textbf{Espace connecte} : changement de mot de passe, consultation de profil, verification de token
-  \item \textbf{Administration} : creation de comptes personnel/medecin, gestion des comptes (activation, suppression)
-\end{itemize}
+  % Acteurs
+  \node[draw, circle, fill=medsyslight, minimum size=0.6cm] (pat) at (0,5) {};
+  \node[below=0pt of pat, font=\tiny] {Patient};
+  \node[draw, circle, fill=medsyslight, minimum size=0.6cm] (adm) at (0,1) {};
+  \node[below=0pt of adm, font=\tiny] {Admin};
+  \node[draw, circle, fill=medsyslight, minimum size=0.6cm] (any) at (0,3) {};
+  \node[below=0pt of any, font=\tiny] {Tout utilisateur};
+
+  % Système
+  \draw[thick, medsysblue] (2,0) rectangle (11,7);
+  \node[above, font=\small\bfseries\color{medsysblue}] at (6.5,7) {ms-auth};
+
+  % Use cases
+  \node[draw, ellipse, fill=entitybg, text width=3.2cm, align=center,
+        font=\scriptsize] (uc1) at (7,6.3) {S'inscrire (Patient)};
+  \node[draw, ellipse, fill=entitybg, text width=3.2cm, align=center,
+        font=\scriptsize] (uc2) at (7,5.2) {Se connecter (JWT)};
+  \node[draw, ellipse, fill=entitybg, text width=3.2cm, align=center,
+        font=\scriptsize] (uc3) at (7,4.1) {Rafraîchir le token};
+  \node[draw, ellipse, fill=entitybg, text width=3.2cm, align=center,
+        font=\scriptsize] (uc4) at (7,3.0) {Réinitialiser le mot de passe};
+  \node[draw, ellipse, fill=entitybg, text width=3.2cm, align=center,
+        font=\scriptsize] (uc5) at (7,1.9) {Changer le mot de passe};
+  \node[draw, ellipse, fill=relbg, text width=3.2cm, align=center,
+        font=\scriptsize] (uc6) at (4,3.0) {Créer compte personnel/médecin};
+  \node[draw, ellipse, fill=relbg, text width=3.2cm, align=center,
+        font=\scriptsize] (uc7) at (4,1.5) {Activer / désactiver un compte};
+
+  % Liens
+  \draw[thick] (pat.east) -- (uc1.west);
+  \draw[thick] (any.east) -- (uc2.west);
+  \draw[thick] (any.east) -- (uc3.west);
+  \draw[thick] (any.east) -- (uc4.west);
+  \draw[thick] (any.east) -- (uc5.west);
+  \draw[thick] (adm.east) -- (uc6.west);
+  \draw[thick] (adm.east) -- (uc7.west);
+
+\end{tikzpicture}
+\caption{Diagramme de cas d'utilisation -- ms-auth}
+\end{figure}
 
 \subsection{ms-patient-personnel -- Cas d'utilisation}
 
 \begin{figure}[H]
-  \centering
-  \includegraphics[width=\textwidth]{figures/uc_patient}
-  \caption{Diagramme de cas d'utilisation -- ms-patient-personnel}
-  \label{fig:uc_patient}
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+
+  % Acteurs
+  \node[draw, circle, fill=medsyslight, minimum size=0.5cm] (pat) at (0,8) {};
+  \node[below=0pt of pat, font=\tiny] {Patient};
+  \node[draw, circle, fill=medsyslight, minimum size=0.5cm] (med) at (0,4) {};
+  \node[below=0pt of med, font=\tiny] {Médecin};
+  \node[draw, circle, fill=relbg, minimum size=0.5cm] (dir) at (0,1) {};
+  \node[below=0pt of dir, font=\tiny] {Directeur};
+
+  \draw[thick, medsysblue] (1.5,0) rectangle (12,10);
+  \node[above, font=\small\bfseries\color{medsysblue}] at (6.75,10) {ms-patient-personnel};
+
+  % Patient UCs
+  \foreach \y/\txt in {
+    9.3/{Consulter son dossier médical},
+    8.4/{Uploader un document},
+    7.5/{Envoyer un message au médecin},
+    6.6/{Prendre un rendez-vous},
+    5.7/{Exporter PDF / QR Code},
+    4.8/{Modifier son profil}
+  }{
+    \node[draw, ellipse, fill=entitybg, text width=3.5cm, align=center]
+      (p\y) at (7.5,\y) {\txt};
+    \draw[thick] (pat.east) -- (p\y.west);
+  }
+
+  % Médecin UCs
+  \foreach \y/\txt in {
+    4.0/{Voir liste patients},
+    3.1/{Consulter dossier patient},
+    2.2/{Envoyer message patient}
+  }{
+    \node[draw, ellipse, fill=entitybg, text width=3.5cm, align=center]
+      (m\y) at (7.5,\y) {\txt};
+    \draw[thick] (med.east) -- (m\y.west);
+  }
+
+  % Directeur UCs
+  \foreach \y/\txt in {
+    1.3/{Tableau de bord -- stats},
+    0.4/{Exporter PDF d'un patient}
+  }{
+    \node[draw, ellipse, fill=relbg, text width=3.5cm, align=center]
+      (d\y) at (7.5,\y) {\txt};
+    \draw[thick] (dir.east) -- (d\y.west);
+  }
+
+\end{tikzpicture}
+\caption{Diagramme de cas d'utilisation -- ms-patient-personnel}
 \end{figure}
 
-Les fonctionnalites sont reparties en quatre domaines :
-\begin{itemize}
-  \item \textbf{Portail patient} : consultation du dossier, upload de documents, messagerie, rendez-vous, export PDF, QR code
-  \item \textbf{Gestion patient (staff)} : CRUD patients, consultation des dossiers, statistiques
-  \item \textbf{Direction} : tableau de bord statistiques, vue globale patients/medecins/RDV
-  \item \textbf{Authentification interne} : login patient par CIN + date de naissance
-\end{itemize}
+\subsection{MedicalAppointments -- Cas d'utilisation}
 
-% ============================================
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+
+  \node[draw, circle, fill=medsyslight, minimum size=0.5cm] (pat) at (0,7) {};
+  \node[below=0pt of pat, font=\tiny] {Patient (anonyme/connecté)};
+  \node[draw, circle, fill=medsyslight, minimum size=0.5cm] (doc) at (0,3) {};
+  \node[below=0pt of doc, font=\tiny] {Médecin};
+  \node[draw, circle, fill=relbg, minimum size=0.5cm] (sec) at (0,1) {};
+  \node[below=0pt of sec, font=\tiny] {Secrétaire};
+
+  \draw[thick, medsysblue] (1.5,0) rectangle (12,9);
+  \node[above, font=\small\bfseries\color{medsysblue}] at (6.75,9) {MedicalAppointments};
+
+  \foreach \y/\txt/\col in {
+    8.3/{Voir créneaux disponibles}/entitybg,
+    7.4/{Réserver un créneau}/entitybg,
+    6.5/{Annuler un rendez-vous}/entitybg,
+    5.6/{S'inscrire liste d'attente}/entitybg,
+    4.7/{Consulter mes rendez-vous}/entitybg
+  }{
+    \node[draw, ellipse, fill=\col, text width=3.8cm, align=center]
+      (u\y) at (7.5,\y) {\txt};
+    \draw[thick] (pat.east) -- (u\y.west);
+  }
+  \foreach \y/\txt in {
+    3.6/{Créer/bloquer des créneaux},
+    2.7/{Voir liste d'attente},
+    1.8/{Voir tous les rendez-vous}
+  }{
+    \node[draw, ellipse, fill=entitybg, text width=3.8cm, align=center]
+      (d\y) at (7.5,\y) {\txt};
+    \draw[thick] (doc.east) -- (d\y.west);
+  }
+  \node[draw, ellipse, fill=relbg, text width=3.8cm, align=center]
+    (s1) at (7.5,0.8) {Modifier un rendez-vous};
+  \draw[thick] (sec.east) -- (s1.west);
+
+\end{tikzpicture}
+\caption{Diagramme de cas d'utilisation -- MedicalAppointments}
+\end{figure}
+
 \section{Diagrammes de Classes}
 
-\subsection{ms-auth -- Classes completes}
+\subsection{Classes -- ms-auth}
 
 \begin{figure}[H]
-  \centering
-  \includegraphics[width=\textwidth]{figures/classes_auth}
-  \caption{Diagramme de classes -- ms-auth}
-  \label{fig:classes_auth}
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+
+  % UserAccount
+  \node[draw, thick, fill=entitybg, text width=5.5cm] (ua) at (0,0) {
+    \begin{center}\textbf{UserAccount}\end{center}
+    \hrule\vspace{2pt}
+    \texttt{- id : Long}\\
+    \texttt{- email : String}\\
+    \texttt{- passwordHash : String}\\
+    \texttt{- nom, prenom, cin : String}\\
+    \texttt{- role : Role}\\
+    \texttt{- enabled, emailVerified : boolean}\\
+    \texttt{- refreshToken : String}\\
+    \texttt{- patientId, personnelId : Long}\\
+    \vspace{2pt}\hrule\vspace{2pt}
+    \texttt{+ isAccountNonExpired() : boolean}\\
+    \texttt{+ getAuthorities() : Collection}
+  };
+
+  % Role (enum)
+  \node[draw, thick, fill=relbg, text width=3.5cm] (role) at (7,1) {
+    \begin{center}\textbf{\small$\ll$enumeration$\gg$\\Role}\end{center}
+    \hrule\vspace{2pt}
+    \texttt{PATIENT}\\
+    \texttt{MEDECIN}\\
+    \texttt{PERSONNEL}\\
+    \texttt{ADMIN}\\
+    \texttt{DIRECTEUR}
+  };
+
+  % AuditLog
+  \node[draw, thick, fill=entitybg, text width=5.5cm] (al) at (0,-5) {
+    \begin{center}\textbf{AuditLog}\end{center}
+    \hrule\vspace{2pt}
+    \texttt{- id : Long}\\
+    \texttt{- userId : Long}\\
+    \texttt{- action : String}\\
+    \texttt{- detail : String}\\
+    \texttt{- ipAddress : String}\\
+    \texttt{- createdAt : LocalDateTime}
+  };
+
+  % JwtService
+  \node[draw, thick, fill=attrbg, text width=5.5cm] (jwt) at (7,-3) {
+    \begin{center}\textbf{JwtService}\end{center}
+    \hrule\vspace{2pt}
+    \texttt{- secretKey : String}\\
+    \texttt{- expiration : long}\\
+    \vspace{2pt}\hrule\vspace{2pt}
+    \texttt{+ generateToken(user) : String}\\
+    \texttt{+ generateRefreshToken(user)}\\
+    \texttt{+ extractUsername(token) : String}\\
+    \texttt{+ isTokenValid(token, user) : boolean}
+  };
+
+  % AuthService
+  \node[draw, thick, fill=attrbg, text width=5.5cm] (as) at (7,-7) {
+    \begin{center}\textbf{AuthService}\end{center}
+    \hrule\vspace{2pt}
+    \texttt{+ login(req) : AuthResponse}\\
+    \texttt{+ register(req) : AuthResponse}\\
+    \texttt{+ refreshToken(req) : AuthResponse}\\
+    \texttt{+ resetPassword(req)}\\
+    \texttt{+ changePassword(req)}
+  };
+
+  \draw[-Stealth, thick, medsysblue] (ua.east) -- (role.west)
+    node[midway, above, font=\tiny] {utilise};
+  \draw[-Stealth, thick, medsysblue] (ua.south) -- (al.north)
+    node[midway, right, font=\tiny] {1 $\to$ 0..*};
+  \draw[-Stealth, thick, dashed, medsysgray] (jwt.south) -- (as.north);
+  \draw[-Stealth, thick, dashed, medsysgray] (as.west) -- (ua.east);
+
+\end{tikzpicture}
+\caption{Diagramme de classes -- ms-auth}
 \end{figure}
 
-L'architecture du microservice ms-auth suit le pattern classique Spring Boot :
-\texttt{Controller} $\rightarrow$ \texttt{Service} $\rightarrow$ \texttt{Repository}.
-La couche securite est assuree par \texttt{JwtService} et \texttt{JwtAuthFilter}
-qui interceptent chaque requete pour valider le token JWT.
-
-\subsection{ms-patient -- Entites JPA}
+\subsection{Classes -- MedicalAppointments (extrait)}
 
 \begin{figure}[H]
-  \centering
-  \includegraphics[width=\textwidth]{figures/classes_patient_entites}
-  \caption{Diagramme de classes -- entites JPA ms-patient}
-  \label{fig:classes_entites}
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize}]
+
+  \node[draw, thick, fill=entitybg, text width=4.8cm] (u) at (0,3) {
+    \begin{center}\textbf{User}\end{center}
+    \hrule\vspace{2pt}
+    \texttt{+ Id : int}\\
+    \texttt{+ FullName : string}\\
+    \texttt{+ Email : string}\\
+    \texttt{+ Role : UserRole}\\
+    \texttt{+ IsRegistered : bool}\\
+    \texttt{+ PenaltyUntil : DateTime?}\\
+    \texttt{+ CancelCount : int}
+  };
+
+  \node[draw, thick, fill=entitybg, text width=4.8cm] (ts) at (6.5,3) {
+    \begin{center}\textbf{TimeSlot}\end{center}
+    \hrule\vspace{2pt}
+    \texttt{+ Id : int}\\
+    \texttt{+ DoctorId : int}\\
+    \texttt{+ Doctor : User}\\
+    \texttt{+ StartTime : DateTime}\\
+    \texttt{+ EndTime : DateTime}\\
+    \texttt{+ Status : SlotStatus}\\
+    \texttt{+ Appointment : Appointment?}
+  };
+
+  \node[draw, thick, fill=entitybg, text width=4.8cm] (ap) at (6.5,-1) {
+    \begin{center}\textbf{Appointment}\end{center}
+    \hrule\vspace{2pt}
+    \texttt{+ Id : int}\\
+    \texttt{+ TimeSlotId : int}\\
+    \texttt{+ PatientId : int}\\
+    \texttt{+ BookedById : int}\\
+    \texttt{+ Reason : string?}\\
+    \texttt{+ Status : AppointmentStatus}\\
+    \texttt{+ AnonymousToken : string?}
+  };
+
+  \node[draw, thick, fill=entitybg, text width=4.8cm] (wl) at (0,-1) {
+    \begin{center}\textbf{WaitingListEntry}\end{center}
+    \hrule\vspace{2pt}
+    \texttt{+ Id : int}\\
+    \texttt{+ DoctorId : int}\\
+    \texttt{+ WeekStartDate : DateOnly}\\
+    \texttt{+ PatientName : string}\\
+    \texttt{+ Email : string}\\
+    \texttt{+ NotifiedAt : DateTime?}
+  };
+
+  \draw[-Stealth, thick] (u.east) -- (ts.west)
+    node[midway, above, font=\tiny] {1 $\to$ 0..*};
+  \draw[-Stealth, thick] (ts.south) -- (ap.north)
+    node[midway, right, font=\tiny] {1 $\to$ 0..1};
+  \draw[-Stealth, thick] (u.south) -- (wl.north)
+    node[midway, left, font=\tiny] {1 $\to$ 0..*};
+
+\end{tikzpicture}
+\caption{Diagramme de classes -- MedicalAppointments}
 \end{figure}
 
-L'entite \texttt{Patient} est liee en \texttt{@OneToOne} a \texttt{DossierMedical},
-qui centralise en \texttt{@OneToMany} toutes les sous-entites cliniques. L'entite
-\texttt{Medecin} est une reference synchronisee depuis le microservice ms-personnel.
+\section{Diagrammes de Séquences}
 
-\subsection{ms-patient -- Services et Controllers}
+\subsection{Séquence -- Connexion JWT (ms-auth)}
 
 \begin{figure}[H]
-  \centering
-  \includegraphics[width=\textwidth]{figures/classes_patient_services}
-  \caption{Diagramme de classes -- couche service/controller ms-patient}
-  \label{fig:classes_services}
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize},
+  lifeline/.style={draw, thick, dashed, medsysgray},
+  msg/.style={-Stealth, thick, medsysblue},
+  ret/.style={-Stealth, thick, dashed, medsysgray}]
+
+  % Participants
+  \node[draw, fill=medsyslight, minimum width=2cm, align=center] (cli) at (0,0)    {Client\\(medsys-web)};
+  \node[draw, fill=entitybg, minimum width=2cm, align=center]    (ac)  at (4.5,0)  {AuthController};
+  \node[draw, fill=entitybg, minimum width=2cm, align=center]    (as)  at (9,0)    {AuthService};
+  \node[draw, fill=attrbg, minimum width=2cm, align=center]      (jwt) at (13,0)   {JwtService};
+
+  % Lignes de vie
+  \draw[lifeline] (0,-0.3)  -- (0,-9);
+  \draw[lifeline] (4.5,-0.3) -- (4.5,-9);
+  \draw[lifeline] (9,-0.3)  -- (9,-9);
+  \draw[lifeline] (13,-0.3) -- (13,-9);
+
+  % Messages
+  \draw[msg] (0,-1) -- (4.5,-1) node[midway, above, font=\tiny] {POST /api/v1/auth/login \{email, password\}};
+  \draw[msg] (4.5,-2) -- (9,-2) node[midway, above, font=\tiny] {login(LoginRequest)};
+  \draw[msg] (9,-3) -- (9,-3.5) node[right, font=\tiny] {loadUserByUsername(email)};
+  \draw[msg] (9,-3.5) -- (9,-4) node[right, font=\tiny] {checkBruteForce(email)};
+  \draw[msg] (9,-4.5) -- (13,-4.5) node[midway, above, font=\tiny] {generateToken(user)};
+  \draw[ret] (13,-5.2) -- (9,-5.2) node[midway, above, font=\tiny] {accessToken};
+  \draw[msg] (9,-5.8) -- (13,-5.8) node[midway, above, font=\tiny] {generateRefreshToken(user)};
+  \draw[ret] (13,-6.5) -- (9,-6.5) node[midway, above, font=\tiny] {refreshToken};
+  \draw[ret] (9,-7.2) -- (4.5,-7.2) node[midway, above, font=\tiny] {AuthResponse \{token, refreshToken, user\}};
+  \draw[ret] (4.5,-8) -- (0,-8) node[midway, above, font=\tiny] {HTTP 200 -- AuthResponse};
+
+\end{tikzpicture}
+\caption{Diagramme de séquence -- Connexion JWT}
 \end{figure}
 
-Les services specialises (\texttt{DocumentService}, \texttt{MessageService},
-\texttt{PdfService}, \texttt{QrCodeService}) sont injectes dans le
-\texttt{PatientPortalController} qui orchestre l'ensemble des fonctionnalites
-du portail patient.
-
-% ============================================
-\section{Diagrammes de Sequence}
-
-\subsection{ms-auth : Authentification Login}
+\subsection{Séquence -- Prise de rendez-vous (MedicalAppointments)}
 
 \begin{figure}[H]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/seq_login}
-  \caption{Sequence : authentification par email/mot de passe}
-  \label{fig:seq_login}
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize},
+  lifeline/.style={draw, thick, dashed, medsysgray},
+  msg/.style={-Stealth, thick, medsysblue},
+  ret/.style={-Stealth, thick, dashed, medsysgray}]
+
+  \node[draw, fill=medsyslight, minimum width=1.8cm, align=center] (cli) at (0,0)    {Patient\\(web)};
+  \node[draw, fill=entitybg, minimum width=1.8cm, align=center]    (ac)  at (3.5,0)  {Appointments\\Controller};
+  \node[draw, fill=entitybg, minimum width=1.8cm, align=center]    (as)  at (7,0)    {Appointment\\Service};
+  \node[draw, fill=attrbg, minimum width=1.8cm, align=center]      (db)  at (10.5,0) {AppDbContext\\(SQL Server)};
+  \node[draw, fill=medsysgreen!20, minimum width=1.8cm, align=center] (nt) at (14,0) {Notification\\Service};
+
+  \draw[lifeline] (0,-0.3)   -- (0,-11);
+  \draw[lifeline] (3.5,-0.3) -- (3.5,-11);
+  \draw[lifeline] (7,-0.3)   -- (7,-11);
+  \draw[lifeline] (10.5,-0.3)-- (10.5,-11);
+  \draw[lifeline] (14,-0.3)  -- (14,-11);
+
+  \draw[msg] (0,-1)    -- (3.5,-1)    node[midway, above, font=\tiny] {POST /api/appointments};
+  \draw[msg] (3.5,-2)  -- (7,-2)      node[midway, above, font=\tiny] {BookAsync(dto, userId?)};
+  \draw[msg] (7,-3)    -- (10.5,-3)   node[midway, above, font=\tiny] {GetSlot(timeSlotId) -- vérification status=Available};
+  \draw[ret] (10.5,-3.7) -- (7,-3.7) node[midway, above, font=\tiny] {TimeSlot};
+  \draw[msg] (7,-4.5)  -- (10.5,-4.5) node[midway, above, font=\tiny] {CreatePatient() si anonyme};
+  \draw[msg] (7,-5.3)  -- (10.5,-5.3) node[midway, above, font=\tiny] {SaveAppointment()};
+  \draw[msg] (7,-6.1)  -- (10.5,-6.1) node[midway, above, font=\tiny] {UpdateSlot(status=Reserved)};
+  \draw[ret] (10.5,-6.9) -- (7,-6.9) node[midway, above, font=\tiny] {Appointment créé};
+  \draw[msg] (7,-7.7)  -- (14,-7.7)   node[midway, above, font=\tiny] {SendConfirmationEmail(patient)};
+  \draw[msg] (14,-8.5) -- (14,-9)     node[right, font=\tiny] {Email SMTP envoyé};
+  \draw[ret] (7,-9.5)  -- (3.5,-9.5)  node[midway, above, font=\tiny] {AppointmentResponseDto};
+  \draw[ret] (3.5,-10.3) -- (0,-10.3) node[midway, above, font=\tiny] {HTTP 201 Created};
+
+\end{tikzpicture}
+\caption{Diagramme de séquence -- Prise de rendez-vous}
 \end{figure}
 
-Le flux de login valide successivement : l'existence du compte, le mot de passe
-(BCrypt), l'activation du compte, puis genere un token JWT signe HMAC-SHA256
-contenant les claims \texttt{userId}, \texttt{role}, \texttt{patientId} et
-\texttt{personnelId}.
-
-\subsection{ms-auth : Inscription Patient}
+\subsection{Séquence -- Consultation du dossier médical}
 
 \begin{figure}[H]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/seq_inscription}
-  \caption{Sequence : inscription d'un nouveau patient}
-  \label{fig:seq_inscription}
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize},
+  lifeline/.style={draw, thick, dashed, medsysgray},
+  msg/.style={-Stealth, thick, medsysblue},
+  ret/.style={-Stealth, thick, dashed, medsysgray}]
+
+  \node[draw, fill=medsyslight, minimum width=1.8cm, align=center] (cli) at (0,0)   {Patient};
+  \node[draw, fill=entitybg, minimum width=1.8cm, align=center]    (gw)  at (4,0)   {JwtAuthFilter};
+  \node[draw, fill=entitybg, minimum width=1.8cm, align=center]    (pc)  at (8,0)   {PatientPortal\\Controller};
+  \node[draw, fill=attrbg, minimum width=1.8cm, align=center]      (ps)  at (12,0)  {Patient\\Service};
+
+  \draw[lifeline] (0,-0.3)  -- (0,-9);
+  \draw[lifeline] (4,-0.3)  -- (4,-9);
+  \draw[lifeline] (8,-0.3)  -- (8,-9);
+  \draw[lifeline] (12,-0.3) -- (12,-9);
+
+  \draw[msg] (0,-1) -- (4,-1) node[midway, above, font=\tiny] {GET /api/v1/patient/me/dossier (Authorization: Bearer JWT)};
+  \draw[msg] (4,-2) -- (4,-2.5) node[right, font=\tiny] {validateToken(JWT)};
+  \draw[msg] (4,-3) -- (4,-3.5) node[right, font=\tiny] {extractUserId(), injectHeaders};
+  \draw[msg] (4,-4) -- (8,-4) node[midway, above, font=\tiny] {GET /dossier (X-User-Id: patientId)};
+  \draw[msg] (8,-5) -- (12,-5) node[midway, above, font=\tiny] {getMyDossier(patientId)};
+  \draw[msg] (12,-6) -- (12,-6.5) node[right, font=\tiny] {findByPatientId(), eager load all};
+  \draw[ret] (12,-7) -- (8,-7) node[midway, above, font=\tiny] {DossierMedicalDTO (consultations, ordonnances, analyses...)};
+  \draw[ret] (8,-7.8) -- (4,-7.8) node[midway, above, font=\tiny] {HTTP 200};
+  \draw[ret] (4,-8.5) -- (0,-8.5) node[midway, above, font=\tiny] {DossierMedicalDTO JSON};
+
+\end{tikzpicture}
+\caption{Diagramme de séquence -- Consultation du dossier médical}
 \end{figure}
 
-L'inscription implique une communication inter-microservices :
-ms-auth appelle ms-patient via REST pour creer l'entite \texttt{Patient}
-et le \texttt{DossierMedical} associe, puis cree le \texttt{UserAccount} localement.
-
-\subsection{ms-auth : Reinitialisation Mot de Passe}
+\section{Diagramme de Composants}
 
 \begin{figure}[H]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/seq_reset_mdp}
-  \caption{Sequence : reinitialisation du mot de passe (2 etapes)}
-  \label{fig:seq_reset}
+\centering
+\begin{tikzpicture}[every node/.style={font=\scriptsize},
+  comp/.style={draw, thick, rounded corners=4pt, minimum width=3.8cm,
+               minimum height=1.4cm, align=center},
+  db/.style={draw, thick, cylinder, shape border rotate=90,
+             fill=gray!15, minimum width=2.2cm, minimum height=0.9cm,
+             align=center, font=\tiny\bfseries},
+  iface/.style={draw, circle, fill=medsysblue, minimum size=4pt,
+                inner sep=0pt}]
+
+  % Couche Client
+  \node[comp, fill=medsysgreen!15] (web) at (6,9)
+    {\textbf{medsys-web}\\React 18 + Vite\\Port 5173};
+  \node[comp, fill=medsysgreen!10] (mob) at (11,9)
+    {\textbf{medsys-mobile}\\React Native / Expo};
+
+  % Services Java
+  \node[comp, fill=entitybg] (auth) at (0,5.5)
+    {\textbf{ms-auth}\\Spring Boot 3\\Port 8082};
+  \node[comp, fill=entitybg] (pat) at (5,5.5)
+    {\textbf{ms-patient-personnel}\\Spring Boot 3\\Port 8081};
+
+  % Services .NET
+  \node[comp, fill=relbg!60] (rdv) at (10,5.5)
+    {\textbf{MedicalAppointments}\\ASP.NET Core 8\\Port 5000};
+  \node[comp, fill=medsysgreen!20] (per) at (15,5.5)
+    {\textbf{ms-personnel}\\ASP.NET Core 8\\Port var.};
+
+  % Bases de données
+  \node[db] (dbauth) at (0,3) {MySQL\\ms\_auth\_db};
+  \node[db] (dbpat)  at (5,3) {MySQL\\ms\_patient\_db};
+  \node[db] (dbrdv)  at (10,3) {SQL Server\\medical\_appts};
+  \node[db] (dbper)  at (15,3) {MongoDB\\personnel\_db};
+
+  % RabbitMQ
+  \node[comp, fill=orange!20, minimum width=3cm, minimum height=1cm] (rmq)
+    at (2.5,1) {\textbf{RabbitMQ}\\Port 5672};
+
+  % Connexions client -> services
+  \draw[-Stealth, thick, medsysblue] (web) -- (auth)
+    node[midway, left, font=\tiny] {/api};
+  \draw[-Stealth, thick, medsysblue] (web) -- (pat)
+    node[midway, right, font=\tiny] {/api/v1};
+  \draw[-Stealth, thick, orange!70!red] (web) -- (rdv)
+    node[midway, right, font=\tiny] {/api/appts};
+  \draw[-Stealth, thick, medsysblue] (mob) -- (auth);
+  \draw[-Stealth, thick, medsysblue!50] (web) to[bend left=10] (per);
+
+  % Services -> BDD
+  \draw[-Stealth, thick, gray] (auth) -- (dbauth);
+  \draw[-Stealth, thick, gray] (pat)  -- (dbpat);
+  \draw[-Stealth, thick, gray] (rdv)  -- (dbrdv);
+  \draw[-Stealth, thick, gray] (per)  -- (dbper);
+
+  % RabbitMQ
+  \draw[-Stealth, thick, dashed, orange!70] (auth) -- (rmq)
+    node[midway, left, font=\tiny] {pub};
+  \draw[-Stealth, thick, dashed, orange!70] (pat)  -- (rmq)
+    node[midway, right, font=\tiny] {pub/sub};
+
+  % Inter-service
+  \draw[Stealth-Stealth, thick, dashed, medsysgray!60] (auth) -- (pat)
+    node[midway, above, font=\tiny] {JWT};
+
+\end{tikzpicture}
+\caption{Diagramme de composants -- Architecture MedSys}
 \end{figure}
-
-Le processus se deroule en deux phases :
-\begin{enumerate}
-  \item Generation d'un token UUID et envoi par email SMTP
-  \item Validation du token, verification de l'expiration (1h), et mise a jour du mot de passe
-\end{enumerate}
-
-\subsection{ms-auth : Creation Compte Personnel}
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/seq_creation_personnel}
-  \caption{Sequence : creation d'un compte personnel/medecin par l'admin}
-  \label{fig:seq_creation_personnel}
-\end{figure}
-
-Seul un utilisateur avec le role \texttt{ADMIN} peut creer des comptes
-pour le personnel medical. Un email est envoye avec les identifiants temporaires.
-
-\subsection{ms-patient : Login Patient par CIN}
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.8\textwidth]{figures/seq_login_cin}
-  \caption{Sequence : authentification patient par CIN + date de naissance}
-  \label{fig:seq_login_cin}
-\end{figure}
-
-Ce mecanisme d'authentification simplifie ne requiert pas de mot de passe :
-le patient s'identifie avec son CIN et sa date de naissance.
-
-\subsection{ms-patient : Consultation du Dossier Medical}
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/seq_dossier}
-  \caption{Sequence : consultation du dossier medical par le patient}
-  \label{fig:seq_dossier}
-\end{figure}
-
-Le \texttt{JwtAuthFilter} extrait le \texttt{patientId} du token pour garantir
-que le patient n'accede qu'a son propre dossier. Le dossier est charge avec
-toutes ses relations (consultations, antecedents, ordonnances, analyses, radiologies).
-
-\subsection{ms-patient : Upload de Document}
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/seq_upload}
-  \caption{Sequence : upload d'un document medical}
-  \label{fig:seq_upload}
-\end{figure}
-
-Le \texttt{DocumentService} assure la securite des uploads : validation du type
-MIME (PDF/images uniquement), limite de taille (5 MB), protection contre le
-path traversal, et stockage avec un nom UUID unique.
-
-\subsection{ms-patient : Export PDF du Dossier}
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/seq_pdf}
-  \caption{Sequence : export du dossier medical en PDF}
-  \label{fig:seq_pdf}
-\end{figure}
-
-Le \texttt{PdfService} utilise la librairie OpenPDF pour generer un document
-structure avec en-tete, informations patient, et toutes les sections du dossier.
-
-\subsection{ms-patient : Statistiques Directeur}
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/seq_stats}
-  \caption{Sequence : generation des statistiques pour le directeur}
-  \label{fig:seq_stats}
-\end{figure}
-
-Le \texttt{DirecteurService} agrege les donnees de multiples repositories
-pour construire un \texttt{DirecteurStatsDTO} complet : comptages patients,
-medecins, analyses par statut, distributions par ville et groupe sanguin.
-
-% ============================================
-\section{Diagrammes de Composants}
-
-\subsection{ms-auth}
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=0.85\textwidth]{figures/composants_auth}
-  \caption{Diagramme de composants -- ms-auth}
-  \label{fig:comp_auth}
-\end{figure}
-
-\subsection{ms-patient-personnel}
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=\textwidth]{figures/composants_patient}
-  \caption{Diagramme de composants -- ms-patient-personnel}
-  \label{fig:comp_patient}
-\end{figure}
-
-L'architecture en composants met en evidence les dependances entre couches
-et les communications inter-microservices : ms-auth appelle ms-patient pour
-la creation de patients, et ms-patient appelle ms-rdv pour la gestion des
-rendez-vous via un proxy REST.

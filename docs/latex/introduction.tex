@@ -1,0 +1,97 @@
+\chapter{Introduction et Contexte}
+
+\section{Contexte du projet}
+
+Le secteur hospitalier fait face à une transformation numérique profonde. La gestion
+manuelle des dossiers patients, la prise de rendez-vous par téléphone et la coordination
+entre les différents services génèrent des inefficacités coûteuses et des risques d'erreurs
+médicales. \textbf{MedSys} répond à ce besoin en proposant une plateforme numérique
+intégrée, pensée pour les établissements de santé de taille moyenne à grande.
+
+\section{Objectifs}
+
+\begin{itemize}[itemsep=4pt]
+  \item \textbf{Centraliser} les dossiers médicaux électroniques dans un système sécurisé
+    et accessible aux professionnels de santé autorisés.
+  \item \textbf{Simplifier} la prise de rendez-vous pour les patients, avec ou sans compte,
+    grâce à une interface web intuitive.
+  \item \textbf{Automatiser} les notifications (confirmations, rappels J-1, libération
+    de créneaux) par email et en temps réel.
+  \item \textbf{Outiller} la direction avec des tableaux de bord analytiques complets.
+  \item \textbf{Gérer} les ressources humaines du personnel hospitalier (plannings,
+    absences, équipes).
+  \item \textbf{Sécuriser} l'ensemble des accès via JWT, RBAC et audit logs.
+\end{itemize}
+
+\section{Périmètre fonctionnel}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\begin{tabularx}{\textwidth}{|l|X|l|}
+\hline
+\rowcolor{tabhead}\color{white}\textbf{Module} &
+\color{white}\textbf{Fonctionnalités principales} &
+\color{white}\textbf{Utilisateurs} \\
+\hline
+ms-auth & Inscription, connexion, JWT, refresh token, RBAC, reset mdp, audit &
+Patient, Admin \\
+\hline
+\rowcolor{roweven}
+ms-patient-personnel & Dossier médical, consultations, ordonnances, analyses, PDF,
+QR Code, messagerie, stats & Patient, Médecin, Direction \\
+\hline
+MedicalAppointments & Créneaux, réservation, liste d'attente, notifications, SignalR &
+Patient, Médecin, Secrétaire \\
+\hline
+\rowcolor{roweven}
+ms-personnel & Plannings, absences, équipes, disponibilités, demandes &
+Personnel, Direction \\
+\hline
+medsys-web & Interface unifiée, tableaux de bord par rôle, prise de RDV &
+Tous les rôles \\
+\hline
+\end{tabularx}
+\caption{Périmètre fonctionnel de MedSys}
+\end{table}
+
+\section{Technologies utilisées}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor{tabhead}\color{white}\textbf{Couche} &
+\color{white}\textbf{Technologie} &
+\color{white}\textbf{Version} \\
+\hline
+Backend Java & Spring Boot, Spring Security, Spring Data JPA & 3.x \\
+\rowcolor{roweven}
+Backend .NET & ASP.NET Core, Entity Framework Core & 8.0 \\
+Frontend web & React, Vite, Axios & 18 / 5.x \\
+\rowcolor{roweven}
+Frontend mobile & React Native (Expo) & SDK 50 \\
+Base de données & MySQL, SQL Server, MongoDB & 8 / 2022 / 7 \\
+\rowcolor{roweven}
+Messagerie async & RabbitMQ & 3.x \\
+Temps réel & SignalR (.NET) & 8.0 \\
+\rowcolor{roweven}
+Auth & JWT (HS256), Refresh Token & -- \\
+Conteneurisation & Docker (Dockerfile par service) & 24.x \\
+\hline
+\end{tabular}
+\caption{Stack technologique de MedSys}
+\end{table}
+
+\section{Méthodes de modélisation}
+
+Ce rapport présente la modélisation du système selon deux approches complémentaires :
+
+\begin{itemize}[itemsep=3pt]
+  \item \textbf{Merise} : modélisation des données à travers trois niveaux —
+    MCD (conceptuel), MLD (logique) et MPD (physique). Adapté à la présentation
+    de la structure des bases de données relationnelles.
+  \item \textbf{UML 2.x} : modélisation comportementale et structurelle — diagrammes
+    de cas d'utilisation, de classes, de séquences et de composants.
+\end{itemize}

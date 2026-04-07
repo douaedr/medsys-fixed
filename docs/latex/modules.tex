@@ -1,0 +1,190 @@
+\chapter{Description des Modules}
+
+\section{ms-auth -- Service d'authentification}
+
+\subsection{Responsabilités}
+\begin{itemize}[itemsep=3pt]
+  \item Gestion du cycle de vie des comptes utilisateurs (inscription, connexion, désactivation).
+  \item Émission et validation des tokens JWT (accès 15 min + refresh 7 jours).
+  \item Protection contre les attaques par force brute (\texttt{LoginRateLimiter}).
+  \item Vérification email par lien tokenisé.
+  \item Traçabilité de toutes les actions sensibles (audit logs).
+\end{itemize}
+
+\subsection{Endpoints principaux}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\rowcolor{tabhead}\color{white}\textbf{Méthode} &
+\color{white}\textbf{URL} &
+\color{white}\textbf{Accès} &
+\color{white}\textbf{Description} \\
+\hline
+POST & \code{/api/v1/auth/register} & Public & Inscription patient \\
+\rowcolor{roweven}
+POST & \code{/api/v1/auth/login} & Public & Connexion + JWT \\
+POST & \code{/api/v1/auth/refresh} & Public & Rafraîchir le token \\
+\rowcolor{roweven}
+POST & \code{/api/v1/auth/forgot-password} & Public & Demande reset mdp \\
+POST & \code{/api/v1/auth/reset-password} & Public & Réinitialiser mdp \\
+\rowcolor{roweven}
+POST & \code{/api/v1/auth/change-password} & Connecté & Changer mdp \\
+GET  & \code{/api/v1/auth/me} & Connecté & Profil courant \\
+\rowcolor{roweven}
+POST & \code{/api/v1/admin/personnel} & ADMIN & Créer compte personnel \\
+\hline
+\end{tabular}
+\caption{Endpoints ms-auth}
+\end{table}
+
+\section{ms-patient-personnel -- Dossier médical}
+
+\subsection{Responsabilités}
+\begin{itemize}[itemsep=3pt]
+  \item Gestion complète des dossiers médicaux électroniques.
+  \item Portail patient : consultation, messagerie, documents, QR Code, export PDF.
+  \item Dashboard direction : statistiques, accès tous patients, export PDF individuel.
+  \item Proxy vers MedicalAppointments pour l'affichage des RDV.
+\end{itemize}
+
+\subsection{Structure du dossier médical}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|l|}
+\hline
+\rowcolor{tabhead}\color{white}\textbf{Section} &
+\color{white}\textbf{Contenu} \\
+\hline
+Antécédents & Médicaux, chirurgicaux, familiaux, allergies (avec sévérité) \\
+\rowcolor{roweven}
+Consultations & Date, médecin, motif, diagnostic, traitement, constantes vitales \\
+Ordonnances & Médicaments, dosages, durées, instructions \\
+\rowcolor{roweven}
+Analyses labo & Type, laboratoire, statut, résultats \\
+Radiologies & Type examen, description, conclusion \\
+\rowcolor{roweven}
+Hospitalisations & Service, dates entrée/sortie, motif \\
+Certificats médicaux & Type, contenu, date émission \\
+\rowcolor{roweven}
+Documents uploadés & Ordonnances scannées, radios, analyses (PDF/images) \\
+\hline
+\end{tabular}
+\caption{Structure du dossier médical électronique}
+\end{table}
+
+\section{MedicalAppointments -- Prise de rendez-vous}
+
+\subsection{Responsabilités}
+\begin{itemize}[itemsep=3pt]
+  \item Gestion des créneaux horaires par les médecins (création unitaire ou en masse, blocage).
+  \item Réservation de rendez-vous pour les patients authentifiés \emph{ou anonymes}.
+  \item Annulation avec token anonyme (pour les patients sans compte).
+  \item Liste d'attente avec notification email automatique à la libération d'un créneau.
+  \item Notifications temps réel via SignalR (\code{/appointmenthub}).
+\end{itemize}
+
+\subsection{Statuts d'un rendez-vous}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|l|l|}
+\hline
+\rowcolor{tabhead}\color{white}\textbf{Statut} &
+\color{white}\textbf{Description} &
+\color{white}\textbf{Transition depuis} \\
+\hline
+Confirmed & RDV confirmé par défaut à la réservation & (initial) \\
+\rowcolor{roweven}
+Pending & En attente de confirmation manuelle & Confirmed \\
+CancelledByPatient & Annulé par le patient & Confirmed, Pending \\
+\rowcolor{roweven}
+CancelledByDoctor & Annulé par le médecin & Confirmed, Pending \\
+CancelledBySecretary & Annulé par la secrétaire & Confirmed, Pending \\
+\rowcolor{roweven}
+Completed & Consultation effectuée & Confirmed \\
+NoShow & Patient absent & Confirmed \\
+\hline
+\end{tabular}
+\caption{Cycle de vie d'un rendez-vous}
+\end{table}
+
+\subsection{Règle de pénalité patient}
+Si un patient annule ou est absent plus de 3 fois, le système enregistre
+une date de \texttt{PenaltyUntil} qui bloque temporairement ses réservations.
+Le compteur \texttt{CancelCount} est incrémenté à chaque annulation.
+
+\section{ms-personnel -- Gestion RH}
+
+\subsection{Responsabilités}
+\begin{itemize}[itemsep=3pt]
+  \item Gestion des profils du personnel médical et paramédical.
+  \item Planifications des gardes et disponibilités.
+  \item Gestion des absences (congés, maladie, formation).
+  \item Organisation en équipes avec responsable.
+  \item Demandes de modification de planning.
+\end{itemize}
+
+\subsection{Types de personnel gérés}
+
+\begin{itemize}
+  \item Médecins (avec spécialité, créneaux de consultation)
+  \item Infirmiers
+  \item Aides-soignants
+  \item Brancardiers
+  \item Secrétaires médicales
+  \item Directeurs de service
+\end{itemize}
+
+\section{medsys-web -- Interface utilisateur}
+
+\subsection{Tableaux de bord par rôle}
+
+\begin{table}[H]
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{|l|l|}
+\hline
+\rowcolor{tabhead}\color{white}\textbf{Rôle} &
+\color{white}\textbf{Fonctionnalités accessibles} \\
+\hline
+PATIENT & Accueil, Dossier médical, Prendre RDV, Mes RDV,
+  Documents, Messagerie, QR/PDF, Profil \\
+\rowcolor{roweven}
+MÉDECIN / PERSONNEL & Liste patients, Dossier complet par patient \\
+DIRECTEUR & Vue d'ensemble (KPIs), Patients, Médecins,
+  Comptes, RDV \& Planning, Stats RDV \\
+\rowcolor{roweven}
+ADMIN & Gestion des comptes (créer, activer/désactiver) \\
+\hline
+\end{tabular}
+\caption{Fonctionnalités par rôle dans medsys-web}
+\end{table}
+
+\subsection{Flux d'authentification frontend}
+
+\begin{enumerate}[itemsep=3pt]
+  \item Le patient se connecte via \textbf{LandingPage} (split login).
+  \item Le token JWT est stocké en \code{sessionStorage} sous la clé \code{medsys\_token}.
+  \item \textbf{AuthContext} décode le token et expose le rôle à tous les composants.
+  \item React Router redirige vers le dashboard approprié selon le rôle.
+  \item À l'expiration du token (15 min), un refresh automatique est tenté.
+\end{enumerate}
+
+\subsection{Intégration MedicalAppointments}
+La section \textbf{Prendre RDV} du dashboard patient utilise directement
+l'API MedicalAppointments via le proxy Vite. Le flux est :
+
+\begin{enumerate}[itemsep=3pt]
+  \item \textbf{Étape 1} -- Sélection du service médical (\code{GET /api/services}).
+  \item \textbf{Étape 2} -- Sélection du médecin (\code{GET /api/services/\{id\}/doctors}).
+  \item \textbf{Étape 3} -- Vue semaine avec créneaux (\code{GET /api/slots?doctorId=\&weekStart=}).
+  \item \textbf{Confirmation} -- Modal de confirmation avec motif, réservation
+    (\code{POST /api/appointments}), affichage du token d'annulation si anonyme.
+  \item \textbf{Liste d'attente} -- Si semaine complète : \code{POST /api/waiting-list}.
+\end{enumerate}
