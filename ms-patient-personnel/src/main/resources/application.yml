@@ -48,6 +48,9 @@ springdoc:
     operationsSorter: method
 
 management:
+  health:
+    rabbit:
+      enabled: false   # RabbitMQ non installé en dev
   endpoints:
     web:
       exposure:

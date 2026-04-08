@@ -67,6 +67,11 @@ springdoc:
     path: /swagger-ui.html
 
 management:
+  health:
+    rabbit:
+      enabled: false   # RabbitMQ non installé en dev
+    mail:
+      enabled: false   # SMTP non configuré en dev
   endpoints:
     web:
       exposure:
