@@ -45,6 +45,9 @@ public class AuthService {
     @Value("${jwt.refresh-expiration:604800000}")
     private long refreshExpiration;
 
+    @Value("${app.email-verification.required:false}")
+    private boolean emailVerificationRequired;
+
     // ── Login ─────────────────────────────────────────────────────────────────
     public AuthResponse login(LoginRequest req, String ipAddress) {
         UserAccount user = userRepo.findByEmail(req.getEmail())
@@ -66,7 +69,7 @@ public class AuthService {
                     org.springframework.http.HttpStatus.FORBIDDEN);
         }
 
-        if (!user.isEmailVerified()) {
+        if (emailVerificationRequired && !user.isEmailVerified()) {
             audit("LOGIN_FAILURE", req.getEmail(), ipAddress, "Email not verified");
             throw new AuthException("Veuillez vérifier votre adresse email avant de vous connecter. "
                     + "Consultez votre boite mail.",

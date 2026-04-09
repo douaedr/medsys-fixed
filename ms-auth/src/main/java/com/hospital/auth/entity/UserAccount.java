@@ -57,7 +57,7 @@ public class UserAccount {
 
     // ── Email verification ────────────────────────────────────────────────────
     @Builder.Default
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "TINYINT(1) DEFAULT 0")
     private boolean emailVerified = false;
 
     @JsonIgnore
@@ -71,7 +71,7 @@ public class UserAccount {
 
     // ── Brute-force protection ────────────────────────────────────────────────
     @Builder.Default
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "INT DEFAULT 0")
     private int failedLoginAttempts = 0;
 
     private LocalDateTime accountLockedUntil;
