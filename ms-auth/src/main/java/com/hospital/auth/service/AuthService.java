@@ -323,6 +323,8 @@ public class AuthService {
             RestTemplate restTemplate = new RestTemplate();
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
+            // Token de service interne pour s'authentifier auprès de ms-patient-personnel
+            headers.setBearerAuth(jwtService.generateServiceToken());
 
             Map<String, Object> body = new HashMap<>();
             body.put("nom", req.getNom());

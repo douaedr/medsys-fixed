@@ -44,6 +44,20 @@ public class JwtService {
                 .compact();
     }
 
+    /** Token de service interne (ms-auth → ms-patient) avec rôle ADMIN, durée 60s */
+    public String generateServiceToken() {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("role", "ADMIN");
+        claims.put("userId", -1L);
+        return Jwts.builder()
+                .claims(claims)
+                .subject("ms-auth-service")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(getSigningKey())
+                .compact();
+    }
+
     public Claims extractClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
