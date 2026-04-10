@@ -15,6 +15,8 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -65,7 +67,7 @@ public class AppointmentService {
         log.info("Appointment created: id={}, patient={}, medecin={}", appointment.getId(),
                 appointment.getPatientId(), appointment.getMedecinId());
 
-        publishEvent(RabbitMQConfig.QUEUE_APPOINTMENT_CREATED, "appointment.created", appointment);
+        publishEvent("APPOINTMENT_CREATED", RabbitMQConfig.QUEUE_APPOINTMENT_CREATED, "appointment.created", appointment);
 
         return toResponse(appointment);
     }
@@ -92,7 +94,7 @@ public class AppointmentService {
         appointment.setStatus(AppointmentStatus.CONFIRMED);
         appointment = appointmentRepo.save(appointment);
         log.info("Appointment confirmed: id={}", id);
-        publishEvent(RabbitMQConfig.QUEUE_APPOINTMENT_CONFIRMED, "appointment.confirmed", appointment);
+        publishEvent("APPOINTMENT_CONFIRMED", RabbitMQConfig.QUEUE_APPOINTMENT_CONFIRMED, "appointment.confirmed", appointment);
         return toResponse(appointment);
     }
 
@@ -115,7 +117,7 @@ public class AppointmentService {
         }
 
         log.info("Appointment cancelled: id={}", id);
-        publishEvent(RabbitMQConfig.QUEUE_APPOINTMENT_CANCELLED, "appointment.cancelled", appointment);
+        publishEvent("APPOINTMENT_CANCELLED", RabbitMQConfig.QUEUE_APPOINTMENT_CANCELLED, "appointment.cancelled", appointment);
         return toResponse(appointment);
     }
 
@@ -131,7 +133,7 @@ public class AppointmentService {
 
         log.info("No-show recorded for patient={}, appointment={}", appointment.getPatientId(), id);
 
-        publishEvent(RabbitMQConfig.QUEUE_APPOINTMENT_NOSHOW, "appointment.noshow", appointment);
+        publishEvent("APPOINTMENT_NOSHOW", RabbitMQConfig.QUEUE_APPOINTMENT_NOSHOW, "appointment.noshow", appointment);
         // Return the updated appointment from the batch save
         return toResponse(patientAppointments.stream()
                 .filter(a -> a.getId().equals(id))
@@ -155,18 +157,40 @@ public class AppointmentService {
                 .orElseThrow(() -> new NoSuchElementException("Rendez-vous introuvable: " + id));
     }
 
-    private void publishEvent(String queue, String routingKey, Appointment apt) {
+    /**
+     * Publie un événement enrichi sur medsys.exchange.
+     *
+     * @param eventType  Type d'événement (ex: "APPOINTMENT_CREATED")
+     * @param queue      Nom de la queue (non utilisé directement, pour log)
+     * @param routingKey Routing key RabbitMQ
+     * @param apt        Entité Appointment source
+     */
+    private void publishEvent(String eventType, String queue, String routingKey, Appointment apt) {
         try {
-            Map<String, Object> payload = Map.of(
-                    "appointmentId", apt.getId(),
-                    "patientId", apt.getPatientId(),
-                    "medecinId", apt.getMedecinId(),
-                    "dateHeure", apt.getDateHeure().toString(),
-                    "status", apt.getStatus().name()
-            );
+            Map<String, Object> payload = new HashMap<>();
+            // Champs obligatoires
+            payload.put("eventType",     eventType);
+            payload.put("appointmentId", apt.getId());
+            payload.put("patientId",     apt.getPatientId());
+            payload.put("medecinId",     apt.getMedecinId());
+            payload.put("dateHeure",     apt.getDateHeure().toString());
+            payload.put("status",        apt.getStatus().name());
+            payload.put("timestamp",     LocalDateTime.now().toString());
+            // Noms en clair — disponibles car stockés à la création du RDV
+            payload.put("patientNom",    apt.getPatientNom());
+            payload.put("patientPrenom", apt.getPatientPrenom());
+            payload.put("medecinNom",    apt.getMedecinNom());
+            payload.put("medecinPrenom", apt.getMedecinPrenom());
+            // Informations complémentaires
+            payload.put("motif",         apt.getMotif());
+            payload.put("notes",         apt.getNotes());
+            payload.put("noShowCount",   apt.getNoShowCount());
+
             rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, routingKey, payload);
+            log.info("[RabbitMQ] Événement '{}' publié pour rendez-vous id={}", eventType, apt.getId());
         } catch (Exception ex) {
-            log.warn("Failed to publish RabbitMQ event '{}': {}", routingKey, ex.getMessage());
+            log.warn("[RabbitMQ] Échec publication '{}' pour rendez-vous id={} : {}",
+                    routingKey, apt.getId(), ex.getMessage());
         }
     }
 

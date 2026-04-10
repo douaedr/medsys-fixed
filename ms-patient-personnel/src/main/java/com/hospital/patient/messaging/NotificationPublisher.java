@@ -28,7 +28,7 @@ public class NotificationPublisher {
 
         try {
             rabbitTemplate.convertAndSend(
-                    RabbitMQConfig.PATIENT_EXCHANGE,
+                    RabbitMQConfig.EXCHANGE_NAME,
                     RabbitMQConfig.ROUTING_PATIENT_NOTIFICATION,
                     event);
             log.info("[RabbitMQ] Published PATIENT_NOTIFICATION for patientId={}", patientId);
@@ -53,7 +53,7 @@ public class NotificationPublisher {
 
         try {
             rabbitTemplate.convertAndSend(
-                    RabbitMQConfig.PATIENT_EXCHANGE,
+                    RabbitMQConfig.EXCHANGE_NAME,
                     RabbitMQConfig.ROUTING_APPOINTMENT_REBOOK,
                     event);
             log.info("[RabbitMQ] Published APPOINTMENT_REBOOK_REQUESTED patientId={} originalId={}",

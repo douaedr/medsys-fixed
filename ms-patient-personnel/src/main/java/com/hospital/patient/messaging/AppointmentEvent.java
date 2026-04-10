@@ -6,11 +6,14 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 /**
- * Inbound event received from the appointment microservice (.NET or other).
- * camelCase naming for .NET interoperability.
+ * Événement RabbitMQ reçu de ms-rdv via medsys.exchange.
+ *
+ * <p>Les noms de champs correspondent exactement au payload publié par
+ * {@code AppointmentService.publishEvent()} dans ms-rdv.</p>
+ *
+ * <p>Champs obligatoires : eventType, appointmentId, patientId, medecinId, dateHeure.</p>
+ * <p>Champs optionnels  : noms, motif, notes, noShowCount, timestamp.</p>
  */
 @Data
 @Builder
@@ -19,7 +22,7 @@ import java.time.LocalDateTime;
 public class AppointmentEvent {
 
     @JsonProperty("eventType")
-    private String eventType;   // APPOINTMENT_CREATED | APPOINTMENT_CANCELLED
+    private String eventType;        // APPOINTMENT_CREATED | APPOINTMENT_CANCELLED | APPOINTMENT_NOSHOW
 
     @JsonProperty("appointmentId")
     private Long appointmentId;
@@ -27,21 +30,38 @@ public class AppointmentEvent {
     @JsonProperty("patientId")
     private Long patientId;
 
-    @JsonProperty("doctorId")
-    private Long doctorId;
+    /** ID du médecin tel que publié par ms-rdv (champ "medecinId"). */
+    @JsonProperty("medecinId")
+    private Long medecinId;
 
-    @JsonProperty("doctorName")
-    private String doctorName;
+    @JsonProperty("medecinNom")
+    private String medecinNom;
 
-    @JsonProperty("specialty")
-    private String specialty;
+    @JsonProperty("medecinPrenom")
+    private String medecinPrenom;
 
-    @JsonProperty("appointmentDate")
-    private LocalDateTime appointmentDate;
+    @JsonProperty("patientNom")
+    private String patientNom;
+
+    @JsonProperty("patientPrenom")
+    private String patientPrenom;
+
+    /** Date/heure au format ISO-8601 (ex: "2026-04-10T14:30:00"). */
+    @JsonProperty("dateHeure")
+    private String dateHeure;
+
+    @JsonProperty("status")
+    private String status;
+
+    @JsonProperty("motif")
+    private String motif;
 
     @JsonProperty("notes")
     private String notes;
 
+    @JsonProperty("noShowCount")
+    private int noShowCount;
+
     @JsonProperty("timestamp")
-    private LocalDateTime timestamp;
+    private String timestamp;
 }

@@ -15,6 +15,11 @@ export default defineConfig({
         target: 'http://localhost:8082',
         changeOrigin: true,
       },
+      // Routes de rendez-vous → ms-rdv (8083)
+      '/api/v1/rdv': {
+        target: 'http://localhost:8083',
+        changeOrigin: true,
+      },
       // Toutes les autres routes /api/v1 → ms-patient-personnel (8081)
       '/api/v1': {
         target: 'http://localhost:8081',
