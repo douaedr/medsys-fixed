@@ -1,0 +1,110 @@
+@startuml
+title MCD - Microservice ms-rdv (Merise)
+skinparam linetype ortho
+skinparam entity {
+  BackgroundColor LightCyan
+  BorderColor DarkBlue
+}
+skinparam diamond {
+  BackgroundColor LightYellow
+  BorderColor DarkGoldenRod
+}
+
+' ===================== ENTITES =====================
+
+entity "APPOINTMENT" as APT {
+  *id : BIGINT <<PK>>
+  --
+  patient_id     : BIGINT <<FK ref ms-patient>>
+  medecin_id     : BIGINT <<FK ref ms-auth>>
+  creneau_id     : BIGINT <<FK>>
+  status         : ENUM(PENDING, CONFIRMED, CANCELLED, COMPLETED, NO_SHOW)
+  priority       : ENUM(LOW, NORMAL, HIGH, URGENT)
+  date_heure     : DATETIME
+  motif          : VARCHAR(500)
+  notes          : VARCHAR(1000)
+  rappel_envoye  : BOOLEAN
+  no_show_count  : INT
+  patient_nom    : VARCHAR(255)
+  patient_prenom : VARCHAR(255)
+  medecin_nom    : VARCHAR(255)
+  medecin_prenom : VARCHAR(255)
+  specialite_id  : BIGINT
+  created_at     : DATETIME
+  updated_at     : DATETIME
+}
+
+entity "TIME_SLOT" as TS {
+  *id : BIGINT <<PK>>
+  --
+  medecin_id     : BIGINT <<ref ms-auth>>
+  medecin_nom    : VARCHAR(255)
+  medecin_prenom : VARCHAR(255)
+  specialite_id  : BIGINT
+  debut          : DATETIME
+  fin            : DATETIME
+  disponible     : BOOLEAN
+  duree_minutes  : INT
+  type           : ENUM(CONSULTATION, URGENCE, SUIVI, TELECONSULTATION)
+  created_at     : DATETIME
+}
+
+entity "WAITING_LIST" as WL {
+  *id : BIGINT <<PK>>
+  --
+  patient_id     : BIGINT <<ref ms-patient>>
+  patient_nom    : VARCHAR(255)
+  patient_prenom : VARCHAR(255)
+  medecin_id     : BIGINT <<nullable - ref ms-auth>>
+  specialite_id  : BIGINT
+  priority       : ENUM(LOW, NORMAL, HIGH, URGENT)
+  date_ajout     : DATETIME
+  motif          : VARCHAR(500)
+  notifie        : BOOLEAN
+}
+
+' ===================== ASSOCIATIONS =====================
+
+diamond "UTILISE" as UTIL
+diamond "CONCERNE" as CONC
+diamond "ATTEND" as ATT
+
+' ===================== LIENS =====================
+
+APT }o--|| UTIL : "(0,n)-(1,1)"
+TS  ||--o{ UTIL : "(1,1)-(0,n)"
+
+note on link
+  Un RDV utilise
+  exactement un creneau.
+  Un creneau peut etre
+  utilise par 0 ou 1 RDV.
+end note
+
+WL  }o--|| ATT  : "(0,n)-(1,1)"
+TS  ||--o{ ATT  : "(1,1)-(0,n)"
+
+note on link
+  Un patient en file d'attente
+  peut etre notifie d'un creneau.
+end note
+
+' ===================== NOTES MICROSERVICES =====================
+
+note bottom of APT
+  Donnees denormalisees intentionnellement :
+  patient_nom, medecin_nom copies depuis
+  ms-auth et ms-patient a la creation du RDV
+  (independance inter-microservices).
+  patient_id et medecin_id restent des
+  references logiques (pas de FK physique).
+end note
+
+note bottom of WL
+  specialite_id : reference vers ms-patient
+  (table SPECIALITE).
+  medecin_id optionnel : si null, tout medecin
+  de la specialite peut satisfaire la demande.
+end note
+
+@enduml

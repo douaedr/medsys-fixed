@@ -1,0 +1,82 @@
+@startuml
+title Diagramme de Composants - ms-rdv (:8083)
+skinparam componentStyle rectangle
+
+package "ms-rdv (:8083)" {
+
+  package "Controller Layer" {
+    [AppointmentController\n/api/v1/rdv/appointments] as AC
+    [TimeSlotController\n/api/v1/rdv/slots]           as TSC
+    [WaitingListController\n/api/v1/rdv/waitlist]     as WLC
+    [StatsController\n/api/v1/rdv/stats]              as SC
+  }
+
+  package "Security Layer" {
+    [JwtAuthFilter]  as JAF
+    [SecurityConfig] as SECC
+  }
+
+  package "Service Layer" {
+    [AppointmentService]        as AS
+    [TimeSlotService]           as TSS
+    [WaitingListService]        as WLS
+    [SlotRecommendationService] as SRS
+    [NoShowDetectionService]    as NSD
+    [StatsService]              as SS
+  }
+
+  package "Messaging Layer" {
+    [RabbitMQConfig]    as RMQC
+  }
+
+  package "Data Layer" {
+    [AppointmentRepository]   as AR
+    [TimeSlotRepository]      as TSR
+    [WaitingListRepository]   as WLR
+    database "ms_rdv_db\n(MySQL :3307)" as DB
+  }
+}
+
+' ---- Flux entrants ----
+[Frontend Web\n:5173]    --> AC  : REST /api/v1/rdv (JWT Bearer)
+[medsys-mobile\n(Expo)]  --> AC  : REST /api/v1/rdv (JWT Bearer)
+[API Gateway\n:8080]     --> AC  : REST proxy
+
+' ---- Securite ----
+SECC --> JAF : configure filtre
+JAF  --> AC  : valide token JWT (secret ms-auth)
+
+' ---- Controllers → Services ----
+AC  --> AS
+TSC --> TSS
+TSC --> SRS
+WLC --> WLS
+SC  --> SS
+SC  --> NSD
+
+' ---- Services → Data ----
+AS  --> AR
+AS  --> TSR
+AS  --> RMQC
+TSS --> TSR
+WLS --> WLR
+SRS --> TSR
+SRS --> AR
+NSD --> AR
+NSD --> RMQC
+SS  --> AR
+
+' ---- Data → DB ----
+AR  --> DB
+TSR --> DB
+WLR --> DB
+
+' ---- Flux RabbitMQ sortants ----
+[RabbitMQ\nmedsys.exchange] as RMQ
+RMQC --> RMQ : appointment.created\nappointment.confirmed\nappointment.cancelled\nappointment.noshow
+
+' ---- Consommateurs RabbitMQ ----
+RMQ ..> [ms-notify\n:8084]         : WebSocket / Email
+RMQ ..> [ms-patient\n:8081]        : copie locale AppointmentRecord
+
+@enduml

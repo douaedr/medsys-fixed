@@ -1,0 +1,55 @@
+@startuml
+title Diagramme de Composants - ms-notify (:8084)
+skinparam componentStyle rectangle
+
+package "ms-notify (:8084)" {
+
+  package "WebSocket Layer" {
+    [WebSocketConfig\n(STOMP / SockJS)] as WSC
+    [NotificationController\n/app/notify] as NC
+  }
+
+  package "Service Layer" {
+    [NotificationService] as NS
+    [EmailService]        as ES
+  }
+
+  package "Messaging Layer" {
+    [RabbitMQConsumer]  as RMQC
+    [RabbitMQConfig]    as RMQCFG
+  }
+
+  package "Templates" {
+    [rdv-confirmation.html\n(Thymeleaf)] as TH1
+    [rdv-reminder.html\n(Thymeleaf)]    as TH2
+  }
+}
+
+' ---- Consommation RabbitMQ ----
+[RabbitMQ\nmedsys.exchange] as RMQ
+
+RMQ --> RMQC : appointment.created\nappointment.confirmed\nappointment.cancelled\nappointment.noshow
+
+RMQC --> NS : delègue notifications
+
+' ---- Dispatch WebSocket ----
+[SimpMessagingTemplate] as SIMP
+
+NS --> SIMP : convertAndSendToUser(userId)\nconvertAndSend("/topic/directeur")
+
+' ---- WebSocket clients ----
+[Frontend Web\n:5173] <.. SIMP : /user/{id}/queue/notifications\n/topic/user/{id}
+[Frontend Web\n:5173] <.. SIMP : /topic/directeur (Directeur)
+[medsys-mobile\n(Expo)] <.. SIMP : WebSocket (si connecte)
+
+' ---- Email ----
+NS --> ES : envoi email (confirmation, rappel)
+ES --> TH1 : render template confirmation
+ES --> TH2 : render template rappel
+[SMTP Server\n(Gmail / SES)] <.. ES : JavaMailSender
+
+' ---- Config ----
+RMQCFG --> RMQC : configure queues
+WSC --> SIMP : configure broker
+
+@enduml

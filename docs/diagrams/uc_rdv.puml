@@ -1,0 +1,87 @@
+@startuml
+title Diagramme de Cas d'Utilisation - ms-rdv (:8083)
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Patient"             as P
+actor "Medecin"             as M
+actor "Admin / Personnel"   as A
+actor "Directeur"           as D
+actor "ms-notify\n:8084"   as NOTIF <<systeme>>
+actor "ms-patient\n:8081"  as PAT   <<systeme>>
+
+rectangle "ms-rdv (:8083)" {
+
+  package "Creneaux (TimeSlots)" {
+    usecase "Creer un creneau"                          as UC1
+    usecase "Consulter creneaux disponibles (medecin)"  as UC2
+    usecase "Consulter creneaux par specialite"         as UC3
+    usecase "Supprimer un creneau"                      as UC4
+    usecase "Recommander creneaux intelligents"         as UC5
+  }
+
+  package "Rendez-vous" {
+    usecase "Prendre un rendez-vous"          as UC6
+    usecase "Voir son rendez-vous (id)"       as UC7
+    usecase "Lister ses RDV (patient)"        as UC8
+    usecase "Lister RDV agenda (medecin)"     as UC9
+    usecase "Confirmer un RDV"                as UC10
+    usecase "Annuler un RDV"                  as UC11
+    usecase "Marquer absence (no-show)"       as UC12
+    usecase "Cloture (RDV complete)"          as UC13
+  }
+
+  package "File d'attente" {
+    usecase "S'inscrire en liste d'attente"   as UC14
+    usecase "Consulter la file d'attente"     as UC15
+    usecase "Notifier patient disponibilite"  as UC16
+  }
+
+  package "Statistiques" {
+    usecase "Tableau de bord (stats)"         as UC17
+    usecase "Absences (no-shows) par patient" as UC18
+  }
+}
+
+' --- Acteurs ---
+P  --> UC2
+P  --> UC3
+P  --> UC5
+P  --> UC6
+P  --> UC7
+P  --> UC8
+P  --> UC11
+P  --> UC14
+
+M  --> UC1
+M  --> UC2
+M  --> UC3
+M  --> UC4
+M  --> UC7
+M  --> UC9
+M  --> UC10
+M  --> UC12
+M  --> UC13
+M  --> UC15
+
+A  --> UC1
+A  --> UC4
+A  --> UC10
+A  --> UC11
+A  --> UC15
+A  --> UC17
+A  --> UC18
+
+D  --> UC17
+D  --> UC18
+
+' --- Relations include / extend ---
+UC6  ..> UC2  : <<include>>
+UC6  ..> NOTIF : <<publie appointment.created\nvia RabbitMQ>>
+UC11 ..> NOTIF : <<publie appointment.cancelled\nvia RabbitMQ>>
+UC12 ..> NOTIF : <<publie appointment.noshow\nvia RabbitMQ>>
+UC16 ..> NOTIF : <<notifie patient disponibilite>>
+UC8  ..> PAT   : <<copie locale\nAppointmentRecord>>
+UC5  ..> UC3   : <<include>>
+
+@enduml

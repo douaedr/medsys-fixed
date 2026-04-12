@@ -1,0 +1,93 @@
+@startuml
+title Sequence : Prise de Rendez-vous (ms-rdv)
+
+actor Patient
+participant "Frontend Web\n:5173" as FE
+participant "AppointmentController\n/api/v1/rdv/appointments" as CTRL
+participant "JwtAuthFilter" as JWT
+participant "AppointmentService" as SVC
+participant "TimeSlotService" as TSS
+participant "TimeSlotRepository" as TSR
+participant "AppointmentRepository" as AR
+database "ms_rdv_db\n(MySQL :3307)" as DB
+participant "RabbitMQ\nmedsys.exchange" as RMQ
+participant "ms-notify\n:8084" as NOTIF
+participant "ms-patient\n:8081" as PAT
+
+== Etape 1 : Consulter les creneaux disponibles ==
+
+Patient -> FE : Choisit une specialite / un medecin
+FE -> CTRL : GET /api/v1/rdv/slots/medecin/{medecinId}\n[Authorization: Bearer <token>]
+CTRL -> JWT : valide token JWT
+JWT --> CTRL : patientId, role = PATIENT
+CTRL -> TSS : getAvailableByMedecin(medecinId)
+TSS -> TSR : findByMedecinIdAndDisponibleTrue(medecinId)
+TSR -> DB : SELECT * FROM time_slots\nWHERE medecin_id=? AND disponible=true
+DB --> TSR : List<TimeSlot>
+TSR --> TSS : List<TimeSlot>
+TSS --> CTRL : List<TimeSlotResponse>
+CTRL --> FE : 200 OK - Liste des creneaux
+FE --> Patient : Affiche les creneaux disponibles
+
+== Etape 2 : Prendre le rendez-vous ==
+
+Patient -> FE : Selectionne un creneau + saisit le motif
+FE -> CTRL : POST /api/v1/rdv/appointments\n{patientId, medecinId, creneauId, motif, ...}
+CTRL -> JWT : valide token JWT
+JWT --> CTRL : OK - role PATIENT autorise
+CTRL -> SVC : createAppointment(AppointmentRequest)
+
+SVC -> TSR : findById(creneauId)
+TSR -> DB : SELECT * FROM time_slots WHERE id=?
+DB --> TSR : TimeSlot
+
+alt Creneau non trouve
+  TSR --> SVC : Empty
+  SVC --> CTRL : NoSuchElementException
+  CTRL --> FE : 404 Not Found
+  FE --> Patient : "Creneau introuvable"
+end
+
+alt Creneau deja pris
+  SVC -> SVC : slot.isDisponible() == false
+  SVC --> CTRL : IllegalStateException
+  CTRL --> FE : 409 Conflict
+  FE --> Patient : "Creneau plus disponible"
+end
+
+SVC -> TSR : slot.setDisponible(false) → save
+TSR -> DB : UPDATE time_slots SET disponible=false WHERE id=?
+
+SVC -> AR : save(Appointment{status=PENDING, ...})
+AR -> DB : INSERT INTO appointments (...)
+DB --> AR : Appointment{id=X}
+AR --> SVC : Appointment sauvegarde
+
+== Etape 3 : Publication RabbitMQ ==
+
+SVC -> RMQ : convertAndSend(\n  "medsys.exchange",\n  "appointment.created",\n  {eventType, appointmentId, patientId,\n   medecinId, dateHeure, patientNom,\n   medecinNom, motif, noShowCount, ...}\n)
+
+RMQ --> NOTIF : appointment.created\n→ queue: appointment.created
+RMQ --> PAT   : appointment.created\n→ queue: patient.rdv.queue
+
+note over NOTIF
+  1. notifyRdvConfirmed(patientId)
+     → WebSocket: /user/{patientId}/queue/notifications
+     → Topic:     /topic/user/{patientId}
+  2. notifyMedecinNewAppointment(medecinId)
+     → WebSocket: /user/{medecinId}/queue/notifications
+  3. (optionnel) envoi email confirmation
+end note
+
+note over PAT
+  AppointmentEventListener:
+  handleCreated(event)
+  → save AppointmentRecord local
+    (status = SCHEDULED)
+end note
+
+SVC --> CTRL : AppointmentResponse{id, status=PENDING, ...}
+CTRL --> FE : 201 Created - AppointmentResponse
+FE --> Patient : "Rendez-vous pris ! En attente de confirmation."
+
+@enduml

@@ -1,0 +1,70 @@
+@startuml
+title Sequence : Notification Temps Reel WebSocket (ms-notify)
+
+participant "ms-rdv\n:8083" as RDV
+participant "RabbitMQ\nmedsys.exchange" as RMQ
+participant "RabbitMQConsumer\n(ms-notify)" as CONS
+participant "NotificationService" as NS
+participant "SimpMessagingTemplate\n(STOMP Broker)" as SIMP
+participant "EmailService" as ES
+participant "SMTP Server" as SMTP
+actor "Patient\n(Browser/Mobile)" as P
+actor "Medecin\n(Browser)" as M
+actor "Directeur\n(Browser)" as D
+
+== Publication depuis ms-rdv ==
+
+RDV -> RMQ : convertAndSend(\n  "medsys.exchange",\n  "appointment.created",\n  {appointmentId, patientId, medecinId,\n   patientNom, medecinNom,\n   dateHeure, patientEmail, ...}\n)
+note right of RMQ
+  L'exchange route le message
+  vers DEUX queues simultanement :
+  - appointment.created    (ms-notify)
+  - patient.rdv.queue      (ms-patient)
+end note
+
+== Consommation dans ms-notify ==
+
+RMQ -> CONS : handleAppointmentCreated(Map event)\n(queue: appointment.created)
+CONS -> CONS : parseLong(event, "patientId") → patientId\nparseLong(event, "medecinId") → medecinId\nstringOrDefault(event, "medecinNom", "le medecin")\nstringOrDefault(event, "dateHeure", "")\nstringOrDefault(event, "patientEmail", "")
+
+== Notification patient : confirmation RDV ==
+
+CONS -> NS : notifyRdvConfirmed(\n  patientId, medecinId, medecinNom,\n  dateHeure, patientEmail\n)
+
+NS -> NS : buildNotif {type="RDV_CONFIRMED",\n  "Votre RDV avec [medecinNom]\n  est confirme pour le [dateHeure]"}
+
+NS -> SIMP : convertAndSendToUser(patientId,\n  "/queue/notifications", notification)
+SIMP --> P : WebSocket push\n→ Patient voit la notif en temps reel
+
+NS -> SIMP : convertAndSend("/topic/user/" + patientId, notification)
+SIMP --> P : (multi-onglets: meme notif)
+
+alt patientEmail non vide
+  NS -> ES : sendRdvConfirmation(email, medecinNom, dateHeure)
+  ES -> ES : renderTemplate(rdv-confirmation.html,\n  {medecinNom, dateHeure})
+  ES -> SMTP : send(MimeMessage)
+  SMTP --> P : Email "Votre RDV est confirme"
+end
+
+== Notification medecin : nouveau RDV ==
+
+CONS -> NS : notifyMedecinNewAppointment(\n  medecinId, patientNom, dateHeure\n)
+NS -> NS : buildNotif {type="NEW_APPOINTMENT",\n  "Nouveau RDV avec [patientNom]\n  le [dateHeure]"}
+NS -> SIMP : convertAndSendToUser(medecinId,\n  "/queue/notifications", notification)
+SIMP --> M : WebSocket push\n→ Medecin voit nouveau RDV
+
+== Cas : No-show + Alerte Directeur ==
+
+RDV -> RMQ : "appointment.noshow"\n{patientId, patientNom, noShowCount=3}
+RMQ -> CONS : handleNoShow(event)
+CONS -> NS : sendToUser(patientId) {type="NOSHOW_REGISTERED"}
+NS -> SIMP : push vers patient
+SIMP --> P : "Une absence a ete enregistree"
+
+alt noShowCount >= 3
+  CONS -> NS : alertDirecteur("Patient [Nom] : N absences", "NOSHOW_ALERT")
+  NS -> SIMP : convertAndSend("/topic/directeur", alertNotif)
+  SIMP --> D : Alerte broadcast directeur\n"Alerte : Patient X a 3 absences non justifiees"
+end
+
+@enduml

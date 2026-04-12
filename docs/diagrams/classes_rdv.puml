@@ -1,0 +1,297 @@
+@startuml
+title Diagramme de Classes - ms-rdv (:8083)
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+' ===================== ENUMS =====================
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum AppointmentPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum SlotType {
+  CONSULTATION
+  URGENCE
+  SUIVI
+  TELECONSULTATION
+}
+
+' ===================== ENTITES =====================
+
+class Appointment {
+  - id: Long
+  - patientId: Long
+  - medecinId: Long
+  - creneauId: Long
+  - status: AppointmentStatus
+  - priority: AppointmentPriority
+  - dateHeure: LocalDateTime
+  - motif: String
+  - notes: String
+  - rappelEnvoye: boolean
+  - noShowCount: int
+  - patientNom: String
+  - patientPrenom: String
+  - medecinNom: String
+  - medecinPrenom: String
+  - specialiteId: Long
+  - createdAt: LocalDateTime
+  - updatedAt: LocalDateTime
+}
+
+class TimeSlot {
+  - id: Long
+  - medecinId: Long
+  - medecinNom: String
+  - medecinPrenom: String
+  - specialiteId: Long
+  - debut: LocalDateTime
+  - fin: LocalDateTime
+  - disponible: boolean
+  - dureeMinutes: int
+  - type: SlotType
+  - createdAt: LocalDateTime
+}
+
+class WaitingListEntry {
+  - id: Long
+  - patientId: Long
+  - patientNom: String
+  - patientPrenom: String
+  - medecinId: Long
+  - specialiteId: Long
+  - priority: AppointmentPriority
+  - dateAjout: LocalDateTime
+  - motif: String
+  - notifie: boolean
+}
+
+' ===================== DTOs =====================
+
+class AppointmentRequest {
+  + patientId: Long
+  + medecinId: Long
+  + creneauId: Long
+  + motif: String
+  + priority: AppointmentPriority
+  + patientNom: String
+  + patientPrenom: String
+  + medecinNom: String
+  + medecinPrenom: String
+  + specialiteId: Long
+}
+
+class AppointmentResponse {
+  + id: Long
+  + patientId: Long
+  + medecinId: Long
+  + status: AppointmentStatus
+  + priority: AppointmentPriority
+  + dateHeure: LocalDateTime
+  + motif: String
+  + statusLabel: String
+  + noShowCount: int
+}
+
+class TimeSlotRequest {
+  + medecinId: Long
+  + medecinNom: String
+  + debut: LocalDateTime
+  + fin: LocalDateTime
+  + dureeMinutes: int
+  + type: SlotType
+  + specialiteId: Long
+}
+
+class TimeSlotResponse {
+  + id: Long
+  + medecinId: Long
+  + debut: LocalDateTime
+  + fin: LocalDateTime
+  + disponible: boolean
+  + type: SlotType
+}
+
+class StatsOverview {
+  + totalRdv: long
+  + rdvConfirmes: long
+  + rdvAnnules: long
+  + rdvNoShow: long
+  + rdvAttente: long
+}
+
+class SlotRecommendation {
+  + slot: TimeSlotResponse
+  + score: double
+  + raison: String
+}
+
+' ===================== REPOSITORIES =====================
+
+interface AppointmentRepository {
+  + findByPatientId(id): List<Appointment>
+  + findByMedecinId(id): List<Appointment>
+  + findByStatus(status): List<Appointment>
+  + findByDateHeureBetween(from, to): List<Appointment>
+  + countByStatus(status): long
+}
+
+interface TimeSlotRepository {
+  + findByMedecinIdAndDisponibleTrue(id): List<TimeSlot>
+  + findBySpecialiteIdAndDisponibleTrueAndDebutBetween(...): List<TimeSlot>
+  + findByDebutBetween(from, to): List<TimeSlot>
+}
+
+interface WaitingListRepository {
+  + findBySpecialiteIdOrderByDateAjoutAsc(id): List<WaitingListEntry>
+  + findByMedecinIdOrderByDateAjoutAsc(id): List<WaitingListEntry>
+  + existsByPatientIdAndSpecialiteId(pId, sId): boolean
+}
+
+' ===================== SERVICES =====================
+
+class AppointmentService {
+  - appointmentRepo: AppointmentRepository
+  - slotRepo: TimeSlotRepository
+  - rabbitTemplate: RabbitTemplate
+  + createAppointment(req): AppointmentResponse
+  + getById(id): AppointmentResponse
+  + getByPatientId(id): List<AppointmentResponse>
+  + getByMedecinId(id): List<AppointmentResponse>
+  + confirm(id): AppointmentResponse
+  + cancel(id, reason): AppointmentResponse
+  + markNoShow(id): AppointmentResponse
+  + complete(id): AppointmentResponse
+  - publishEvent(eventType, queue, key, apt): void
+}
+
+class TimeSlotService {
+  - slotRepo: TimeSlotRepository
+  + createSlot(req): TimeSlotResponse
+  + getAvailableByMedecin(id): List<TimeSlotResponse>
+  + getAvailableBySpecialite(id, from, to): List<TimeSlotResponse>
+  + deleteSlot(id): void
+}
+
+class WaitingListService {
+  - waitingRepo: WaitingListRepository
+  + addToWaitingList(req): WaitingListEntry
+  + getBySpecialite(id): List<WaitingListEntry>
+  + getByMedecin(id): List<WaitingListEntry>
+  + notifierPatient(entryId): void
+  + remove(id): void
+}
+
+class SlotRecommendationService {
+  - slotRepo: TimeSlotRepository
+  - appointmentRepo: AppointmentRepository
+  + recommend(patientId, specialiteId): List<SlotRecommendation>
+}
+
+class NoShowDetectionService {
+  - appointmentRepo: AppointmentRepository
+  - rabbitTemplate: RabbitTemplate
+  + detectAndAlert(): void
+}
+
+class StatsService {
+  - appointmentRepo: AppointmentRepository
+  + getOverview(): StatsOverview
+  + getNoShowsByPatient(patientId): long
+}
+
+' ===================== CONTROLLERS =====================
+
+class AppointmentController {
+  - service: AppointmentService
+  + createAppointment(req): ResponseEntity
+  + getById(id): ResponseEntity
+  + getByPatient(patientId): ResponseEntity
+  + getByMedecin(medecinId): ResponseEntity
+  + confirm(id): ResponseEntity
+  + cancel(id, reason): ResponseEntity
+  + markNoShow(id): ResponseEntity
+  + complete(id): ResponseEntity
+}
+
+class TimeSlotController {
+  - service: TimeSlotService
+  + createSlot(req): ResponseEntity
+  + getAvailableByMedecin(id): ResponseEntity
+  + getAvailableBySpecialite(id, from, to): ResponseEntity
+  + deleteSlot(id): ResponseEntity
+}
+
+class WaitingListController {
+  - service: WaitingListService
+  + addToList(req): ResponseEntity
+  + getBySpecialite(id): ResponseEntity
+  + getByMedecin(id): ResponseEntity
+  + notifierPatient(id): ResponseEntity
+  + remove(id): ResponseEntity
+}
+
+class StatsController {
+  - service: StatsService
+  + getOverview(): ResponseEntity
+  + getNoShowsByPatient(id): ResponseEntity
+}
+
+' ===================== CONFIG =====================
+
+class RabbitMQConfig {
+  + EXCHANGE_NAME: String = "medsys.exchange"
+  + QUEUE_APPOINTMENT_CREATED: String
+  + QUEUE_APPOINTMENT_CANCELLED: String
+  + QUEUE_APPOINTMENT_CONFIRMED: String
+  + QUEUE_APPOINTMENT_NOSHOW: String
+}
+
+class JwtAuthFilter {
+  - jwtSecret: String
+  # doFilterInternal(req, res, chain): void
+}
+
+' ===================== RELATIONS =====================
+
+Appointment       "1" o-- "1" AppointmentStatus
+Appointment       "1" o-- "1" AppointmentPriority
+TimeSlot          "1" o-- "1" SlotType
+WaitingListEntry  "1" o-- "1" AppointmentPriority
+
+AppointmentController   --> AppointmentService
+TimeSlotController      --> TimeSlotService
+WaitingListController   --> WaitingListService
+StatsController         --> StatsService
+
+AppointmentService      --> AppointmentRepository
+AppointmentService      --> TimeSlotRepository
+AppointmentService      --> RabbitMQConfig
+TimeSlotService         --> TimeSlotRepository
+WaitingListService      --> WaitingListRepository
+SlotRecommendationService --> TimeSlotRepository
+SlotRecommendationService --> AppointmentRepository
+NoShowDetectionService  --> AppointmentRepository
+StatsService            --> AppointmentRepository
+
+AppointmentRepository   ..> Appointment
+TimeSlotRepository      ..> TimeSlot
+WaitingListRepository   ..> WaitingListEntry
+
+AppointmentController   ..> AppointmentRequest
+AppointmentController   ..> AppointmentResponse
+TimeSlotController      ..> TimeSlotRequest
+TimeSlotController      ..> TimeSlotResponse
+
+@enduml

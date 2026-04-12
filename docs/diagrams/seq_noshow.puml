@@ -1,0 +1,74 @@
+@startuml
+title Sequence : Absence (No-Show) et Alerte Directeur (ms-rdv)
+
+actor Medecin
+participant "Frontend Web\n:5173" as FE
+participant "AppointmentController\n/api/v1/rdv/appointments" as CTRL
+participant "AppointmentService" as SVC
+participant "AppointmentRepository" as AR
+database "ms_rdv_db\n(MySQL :3307)" as DB
+participant "RabbitMQ\nmedsys.exchange" as RMQ
+participant "ms-notify\n:8084" as NOTIF
+participant "WebSocket\nBroker" as WS
+actor "Patient" as P
+actor "Directeur" as D
+
+== Enregistrement du no-show par le medecin ==
+
+Medecin -> FE : Marque l'absence du patient (RDV {id})
+FE -> CTRL : PATCH /api/v1/rdv/appointments/{id}/noshow\n[Bearer <medecin_token>]\nrole: MEDECIN ou ADMIN requis
+CTRL -> SVC : markNoShow(id)
+
+SVC -> AR : findById(id)
+AR -> DB : SELECT * FROM appointments WHERE id=?
+DB --> AR : Appointment{patientId, noShowCount, ...}
+
+SVC -> AR : appointment.setStatus(NO_SHOW)
+AR -> DB : UPDATE appointments SET status='NO_SHOW' WHERE id=?
+
+== Incrementation du compteur (denormalise) ==
+
+SVC -> AR : findByPatientId(patientId)
+AR -> DB : SELECT * FROM appointments WHERE patient_id=?
+DB --> AR : List<Appointment>
+
+loop Pour chaque RDV du patient
+  SVC -> SVC : appointment.noShowCount++
+end
+SVC -> AR : saveAll(patientAppointments)
+AR -> DB : UPDATE appointments SET no_show_count=?\nWHERE patient_id=?
+
+note right of DB
+  Le compteur est denormalise
+  sur tous les RDV du patient
+  pour les requetes de stats.
+end note
+
+== Publication RabbitMQ ==
+
+SVC -> RMQ : convertAndSend(\n  "medsys.exchange",\n  "appointment.noshow",\n  {eventType="APPOINTMENT_NOSHOW",\n   appointmentId, patientId,\n   patientNom, noShowCount=N, dateHeure, ...}\n)
+
+RMQ --> NOTIF : appointment.noshow\n→ queue: appointment.noshow
+
+== Traitement dans ms-notify ==
+
+NOTIF -> NOTIF : RabbitMQConsumer.handleNoShow(event)
+NOTIF -> WS    : convertAndSendToUser(patientId)\n{type="NOSHOW_REGISTERED",\n "Une absence a ete enregistree\n pour votre RDV."}
+WS --> P : Notification WebSocket\n(tableau de bord patient)
+
+== Alerte Directeur (seuil >= 3 absences) ==
+
+alt noShowCount >= 3
+  NOTIF -> WS : convertAndSend("/topic/directeur")\n{type="NOSHOW_ALERT",\n "Alerte : Le patient [Nom]\n a N absences non justifiees."}
+  WS --> D : Alerte temps reel\n(tableau de bord directeur)
+  note over D
+    Le directeur peut prendre
+    des mesures : suspension
+    temporaire du compte, etc.
+  end note
+end
+
+CTRL --> FE : 200 OK - AppointmentResponse{status=NO_SHOW}
+FE --> Medecin : "Absence enregistree"
+
+@enduml

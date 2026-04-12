@@ -1,0 +1,111 @@
+@startuml
+title Architecture Globale - MedSys Microservices (RabbitMQ)
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+' ===================== CLIENTS =====================
+
+package "Clients" {
+  [Frontend Web\n(Vite/React :5173)]  as FE
+  [App Mobile\n(Expo/React Native)]   as MOB
+}
+
+' ===================== GATEWAY =====================
+
+[API Gateway\n(Spring Cloud :8080)] as GW
+
+' ===================== MICROSERVICES =====================
+
+package "ms-auth (:8082)\nAuthentification JWT" #LightYellow {
+  [AuthController\nAdminController]    as AUTH_CTRL
+  [JwtService]                         as JWT
+  database "ms_auth_db"                as AUTH_DB
+}
+
+package "ms-patient-personnel (:8081)\nPatients + Dossiers medicaux" #LightGreen {
+  [PatientController\nPersonnelController]  as PAT_CTRL
+  [AppointmentEventListener]               as AEL
+  database "ms_patient_db"                 as PAT_DB
+}
+
+package "ms-rdv (:8083)\nRendez-vous + Creneaux" #LightCyan {
+  [AppointmentController\nTimeSlotController\nWaitingListController] as RDV_CTRL
+  [AppointmentService]                                               as RDV_SVC
+  database "ms_rdv_db"                                               as RDV_DB
+}
+
+package "ms-notify (:8084)\nNotifications Temps Reel" #LightPink {
+  [RabbitMQConsumer]      as CONS
+  [NotificationService]   as NOTIF_SVC
+  [WebSocket\n(STOMP/SockJS)] as WS
+  [EmailService]          as EMAIL
+}
+
+' ===================== INFRASTRUCTURE =====================
+
+[RabbitMQ\n(:5672)\nmedsys.exchange] as RMQ
+
+[MySQL\n(:3307)\nXAMPP] as MYSQL
+
+[SMTP\n(Gmail/SES)] as SMTP
+
+' ===================== FLUX REST =====================
+
+FE  --> GW  : HTTPS
+MOB --> GW  : HTTPS
+
+GW  --> AUTH_CTRL : /api/v1/auth\n/api/v1/admin
+GW  --> PAT_CTRL  : /api/v1/patients\n/api/v1/patient
+GW  --> RDV_CTRL  : /api/v1/rdv
+
+FE  --> AUTH_CTRL : /api/v1/auth, /api/v1/admin\n(via Vite proxy :8082)
+FE  --> PAT_CTRL  : /api/v1/patient, /api/v1/patients\n(via Vite proxy :8081)
+FE  --> RDV_CTRL  : /api/v1/rdv\n(via Vite proxy :8083)
+
+' ===================== FLUX RABBITMQ =====================
+
+AUTH_CTRL ..> RMQ : user.created\nuser.logged_in
+
+RDV_SVC   ..> RMQ : appointment.created\nappointment.confirmed\nappointment.cancelled\nappointment.noshow
+
+RMQ ..> AEL      : patient.rdv.queue\n(appointment.created, appointment.cancelled)
+RMQ ..> CONS     : appointment.created/confirmed/cancelled/noshow
+
+CONS --> NOTIF_SVC : dispatch
+
+' ===================== WEBSOCKET =====================
+
+NOTIF_SVC --> WS : push temps reel
+
+WS ..> FE  : /user/{id}/queue/notifications\n/topic/user/{id}\n/topic/directeur
+WS ..> MOB : WebSocket push
+
+' ===================== BASES DE DONNEES =====================
+
+AUTH_CTRL --> AUTH_DB
+PAT_CTRL  --> PAT_DB
+AEL       --> PAT_DB
+RDV_CTRL  --> RDV_DB
+
+AUTH_DB --> MYSQL
+PAT_DB  --> MYSQL
+RDV_DB  --> MYSQL
+
+' ===================== EMAIL =====================
+
+EMAIL --> SMTP
+
+' ===================== LEGENDE =====================
+
+legend right
+  |= Couleur   |= Service       |
+  | LightYellow | ms-auth        |
+  | LightGreen  | ms-patient     |
+  | LightCyan   | ms-rdv         |
+  | LightPink   | ms-notify      |
+
+  Flux REST  : →  (synchrone)
+  RabbitMQ   : ..> (asynchrone)
+endlegend
+
+@enduml

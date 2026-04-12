@@ -1,0 +1,105 @@
+@startuml
+title Diagramme de Classes - ms-notify (:8084)
+skinparam classAttributeIconSize 0
+
+' ===================== DTOs =====================
+
+class NotificationMessage {
+  - id: String
+  - userId: String
+  - type: String
+  - title: String
+  - message: String
+  - data: Map<String, String>
+  - timestamp: LocalDateTime
+  - read: boolean
+}
+
+note right of NotificationMessage
+  Types :
+  RDV_CONFIRMED | RDV_CANCELLED
+  RDV_REMINDER  | NEW_APPOINTMENT
+  NOSHOW_REGISTERED | NOSHOW_ALERT
+  WAITLIST_AVAILABLE | RESULT_READY
+end note
+
+class EmailRequest {
+  + to: String
+  + subject: String
+  + body: String
+}
+
+' ===================== SERVICES =====================
+
+class NotificationService {
+  - messagingTemplate: SimpMessagingTemplate
+  - emailService: EmailService
+  + sendToUser(userId, notification): void
+  + notifyRdvConfirmed(patientId, medecinId, medecinNom, dateHeure, email): void
+  + notifyRdvCancelled(patientId, medecinNom, dateHeure): void
+  + notifyRdvReminder(patientId, medecinNom, dateHeure, email): void
+  + notifyMedecinNewAppointment(medecinId, patientNom, dateHeure): void
+  + notifyWaitlistSlotAvailable(patientId, medecinNom, dateHeure): void
+  + notifyResultReady(patientId, resultType, dossierId): void
+  + alertDirecteur(message, type): void
+}
+
+class EmailService {
+  - mailSender: JavaMailSender
+  - templateEngine: TemplateEngine
+  + sendRdvConfirmation(to, medecinNom, dateHeure): void
+  + sendRdvReminder(to, medecinNom, dateHeure): void
+}
+
+class RabbitMQConsumer {
+  - notificationService: NotificationService
+  + handleAppointmentCreated(event: Map): void
+  + handleAppointmentConfirmed(event: Map): void
+  + handleAppointmentCancelled(event: Map): void
+  + handleNoShow(event: Map): void
+  - parseLong(event, key): Long
+  - stringOrDefault(event, key, default): String
+}
+
+' ===================== CONTROLLER =====================
+
+class NotificationController {
+  - notificationService: NotificationService
+  + sendManualNotification(userId, notification): ResponseEntity
+  + alertDirecteur(message): ResponseEntity
+}
+
+' ===================== CONFIG =====================
+
+class WebSocketConfig {
+  + configureMessageBroker(registry): void
+  + registerStompEndpoints(registry): void
+}
+
+note right of WebSocketConfig
+  Endpoints STOMP :
+  /ws (SockJS fallback)
+  Broker topics: /topic, /user
+  App destination: /app
+end note
+
+class RabbitMQConfig {
+  + EXCHANGE_NAME: "medsys.exchange"
+  + queues: appointment.created/confirmed/cancelled/noshow
+}
+
+class SecurityConfig {
+  + filterChain(http): SecurityFilterChain
+}
+
+' ===================== RELATIONS =====================
+
+RabbitMQConsumer    --> NotificationService
+NotificationController --> NotificationService
+NotificationService --> EmailService
+NotificationService --> SimpMessagingTemplate
+RabbitMQConsumer    --> RabbitMQConfig
+EmailService        --> JavaMailSender
+NotificationService ..> NotificationMessage
+
+@enduml

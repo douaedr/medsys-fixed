@@ -1,0 +1,90 @@
+@startuml
+title Sequence : Annulation de Rendez-vous + File d'attente (ms-rdv)
+
+actor Patient
+actor Medecin
+participant "Frontend Web\n:5173" as FE
+participant "AppointmentController\n/api/v1/rdv/appointments" as CTRL
+participant "AppointmentService" as SVC
+participant "AppointmentRepository" as AR
+participant "TimeSlotRepository" as TSR
+database "ms_rdv_db\n(MySQL :3307)" as DB
+participant "WaitingListService" as WLS
+participant "WaitingListRepository" as WLR
+participant "RabbitMQ\nmedsys.exchange" as RMQ
+participant "ms-notify\n:8084" as NOTIF
+participant "ms-patient\n:8081" as PAT
+
+== Annulation par le patient ou le medecin ==
+
+alt Annulation par Patient
+  Patient -> FE : Clique sur "Annuler mon RDV"
+  FE -> CTRL : PATCH /api/v1/rdv/appointments/{id}/cancel\n?reason=Empechement\n[Bearer <patient_token>]
+else Annulation par Medecin ou Admin
+  Medecin -> FE : Annule le RDV depuis son agenda
+  FE -> CTRL : PATCH /api/v1/rdv/appointments/{id}/cancel\n?reason=Raison annulation\n[Bearer <medecin_token>]
+end
+
+CTRL -> SVC : cancel(id, reason)
+SVC -> AR : findById(id)
+AR -> DB : SELECT * FROM appointments WHERE id=?
+DB --> AR : Appointment
+
+alt RDV introuvable
+  AR --> SVC : Empty
+  SVC --> CTRL : NoSuchElementException
+  CTRL --> FE : 404 Not Found
+end
+
+SVC -> AR : appointment.setStatus(CANCELLED) → save
+AR -> DB : UPDATE appointments SET status='CANCELLED', notes=? WHERE id=?
+
+== Liberation du creneau ==
+
+SVC -> TSR : findById(creneauId)
+TSR -> DB : SELECT * FROM time_slots WHERE id=?
+DB --> TSR : TimeSlot
+SVC -> TSR : slot.setDisponible(true) → save
+TSR -> DB : UPDATE time_slots SET disponible=true WHERE id=?
+note right : Le creneau est a nouveau\ndisponible pour d'autres patients
+
+== Publication RabbitMQ : annulation ==
+
+SVC -> RMQ : convertAndSend(\n  "medsys.exchange",\n  "appointment.cancelled",\n  {eventType="APPOINTMENT_CANCELLED",\n   appointmentId, patientId,\n   medecinNom, dateHeure, ...}\n)
+
+RMQ --> NOTIF : appointment.cancelled\n→ queue: appointment.cancelled
+RMQ --> PAT   : appointment.cancelled\n→ queue: patient.rdv.queue
+
+note over NOTIF
+  notifyRdvCancelled(patientId)
+  → WebSocket: "Votre RDV avec Dr X
+    du JJ/MM a ete annule."
+end note
+
+note over PAT
+  AppointmentEventListener.handleCancelled()
+  → AppointmentRecord.status = "CANCELLED"
+end note
+
+SVC --> CTRL : AppointmentResponse{status=CANCELLED}
+CTRL --> FE : 200 OK
+FE --> Patient : "Rendez-vous annule"
+
+== Verification file d'attente ==
+
+note over WLS, WLR
+  (Processus asynchrone - declenche par
+  NoShowDetectionService ou WaitingListService)
+end note
+
+WLS -> WLR : findBySpecialiteIdOrderByDateAjoutAsc(specialiteId)
+WLR -> DB  : SELECT * FROM waiting_list\nWHERE specialite_id=?\nORDER BY date_ajout ASC
+DB --> WLR : List<WaitingListEntry>
+
+alt File d'attente non vide
+  WLS -> RMQ : "appointment.waitlist"\n{patientId, medecinNom, dateHeure}
+  RMQ --> NOTIF : notifyWaitlistSlotAvailable(patientId)\n→ WebSocket: "Un creneau est disponible !\nConfirmez avant 2 heures."
+  WLS -> WLR : entry.setNotifie(true) → save
+end
+
+@enduml
