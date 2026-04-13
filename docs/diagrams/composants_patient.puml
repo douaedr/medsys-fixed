@@ -38,6 +38,14 @@ package "ms-patient-personnel (:8081)" {
     folder "uploads/\n(fichiers)" as FS
   }
 
+  package "Messaging Layer (RabbitMQ)" {
+    [AppointmentEventListener\n(patient.rdv.queue)]      as AEL
+    [UserCreatedEventListener\n(user.created.patient.queue)] as UCEL
+    [NotificationPublisher]                               as NP
+    [RabbitMQConfig\n(medsys.exchange)]                  as RMQCFG
+    [AppointmentRecordRepository]                         as ARREPO
+  }
+
   package "Mapper & Exceptions" {
     [PatientMapper] as MAP
     [GlobalExceptionHandler] as GEH
@@ -48,6 +56,7 @@ package "ms-patient-personnel (:8081)" {
 [Frontend\n:5173] --> PPC : REST HTTPS
 [Frontend\n:5173] --> DC : REST HTTPS
 [Frontend\n:5173] --> AC : REST HTTPS
+[App Mobile\n(Expo)] --> PPC : REST HTTP (Bearer Token)
 
 SC --> JAF : filtre
 JAF --> JS
@@ -83,8 +92,26 @@ DOCREP --> DB
 MREP --> DB
 AREP --> DB
 MREPO --> DB
+ARREPO --> DB
 
-RDV --> [ms-rdv] : REST HTTP
-[ms-auth\n:8082] --> PC : POST /api/v1/patients\n(creation patient)
+RDV --> [ms-rdv\n:8083] : REST HTTP
+
+' ---- Consommation RabbitMQ ----
+[RabbitMQ\nmedsys.exchange] as RMQ
+
+RMQ ..> AEL  : patient.rdv.queue\n(appointment.created, appointment.cancelled)
+RMQ ..> UCEL : user.created.patient.queue\n(user.created)
+
+AEL  --> ARREPO : save AppointmentRecord
+UCEL --> PREPO  : sync patient profile
+
+' ---- Publication RabbitMQ ----
+NP ..> RMQ : patient.notification\nappointment.rebook
+
+note bottom of AEL
+  Copie locale des RDV :
+  table appointment_records
+  (independance vis-a-vis ms-rdv)
+end note
 
 @enduml

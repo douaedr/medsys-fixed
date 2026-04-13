@@ -1,0 +1,91 @@
+@startuml
+title Diagramme de Composants - medsys-web (React/Vite :5173)
+skinparam componentStyle rectangle
+
+package "medsys-web (React + Vite :5173)" {
+
+  package "Routing (React Router)" {
+    [App.jsx\n(BrowserRouter + Routes)] as APP
+  }
+
+  package "Context / State global" {
+    [AuthContext.jsx\n(user, token, login, logout)] as CTX
+  }
+
+  package "Pages publiques" {
+    [LandingPage.jsx\n/]                    as LP
+    [PatientPortalPage.jsx\n/patient]       as PPP
+    [PersonnelLoginPage.jsx\n/login/personnel] as PLP
+    [ResetPasswordPage.jsx\n/reset-password]  as RPP
+  }
+
+  package "Tableaux de bord (pages protegees)" {
+    [PatientDashboard\n/patient/dashboard]   as PD
+    [PersonnelDashboard\n/personnel/dashboard] as PERSD
+    [AdminDashboard\n/admin]                 as AD
+    [DirecteurDashboard\n/directeur]         as DD
+  }
+
+  package "Couche API (Axios)" {
+    [authApi\n/api/v1/auth]        as AAPI
+    [patientApi\n/api/v1/patient]  as PAPI
+    [adminApi\n/api/v1/admin]      as ADAPI
+    [directeurApi\n/api/v1/directeur] as DAPI
+  }
+}
+
+' ---- Proxy Vite (routing vers microservices) ----
+package "Proxy Vite (vite.config.js)" {
+  [/api/v1/auth  → :8082]  as PX1
+  [/api/v1/admin → :8082]  as PX2
+  [/api/v1/rdv   → :8083]  as PX3
+  [/api/v1       → :8081]  as PX4
+}
+
+' ---- Microservices ----
+[ms-auth\n:8082]             as AUTH
+[ms-patient-personnel\n:8081] as PAT
+[ms-rdv\n:8083]              as RDV
+[ms-notify\n:8084\n(WebSocket STOMP)] as NOTIF
+
+' ---- Routing interne ----
+APP --> CTX   : fournit contexte global
+APP --> LP
+APP --> PPP
+APP --> PLP
+APP --> RPP
+APP --> PD
+APP --> PERSD
+APP --> AD
+APP --> DD
+
+' ---- Dashboards → API ----
+PD    --> PAPI
+PD    --> AAPI
+PERSD --> PAPI
+PERSD --> AAPI
+AD    --> ADAPI
+DD    --> DAPI
+PPP   --> AAPI
+PLP   --> AAPI
+RPP   --> AAPI
+
+' ---- API → Proxy ----
+AAPI  --> PX1
+ADAPI --> PX2
+PAPI  --> PX4
+DAPI  --> PX4
+PAPI  --> PX3 : (RDV via /api/v1/rdv)
+
+' ---- Proxy → Microservices ----
+PX1 --> AUTH
+PX2 --> AUTH
+PX3 --> RDV
+PX4 --> PAT
+
+' ---- WebSocket (notifications temps reel) ----
+PD    ..> NOTIF : STOMP/SockJS\n/ws\nsubscribe /user/{id}/queue/notifications
+PERSD ..> NOTIF : STOMP/SockJS\nsubscribe /user/{id}/queue/notifications
+DD    ..> NOTIF : STOMP/SockJS\nsubscribe /topic/directeur
+
+@enduml

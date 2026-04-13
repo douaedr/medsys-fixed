@@ -1,0 +1,84 @@
+@startuml
+title Diagramme de Cas d'Utilisation - ms-notify (:8084)
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Patient"                         as P
+actor "Medecin"                         as M
+actor "Directeur"                       as D
+actor "ms-rdv\n:8083"                  as RDV  <<systeme>>
+actor "ms-patient\n:8081"              as PAT  <<systeme>>
+actor "Frontend Web\n:5173"            as FE   <<systeme>>
+actor "App Mobile\n(Expo)"             as MOB  <<systeme>>
+
+rectangle "ms-notify (:8084)" {
+
+  package "Reception evenements RabbitMQ" {
+    usecase "Recevoir evenement appointment.created"   as UC1
+    usecase "Recevoir evenement appointment.confirmed" as UC2
+    usecase "Recevoir evenement appointment.cancelled" as UC3
+    usecase "Recevoir evenement appointment.noshow"    as UC4
+  }
+
+  package "Notifications WebSocket temps reel" {
+    usecase "Notifier patient : RDV confirme"       as UC5
+    usecase "Notifier patient : RDV annule"         as UC6
+    usecase "Notifier patient : rappel 24h"         as UC7
+    usecase "Notifier patient : creneau disponible" as UC8
+    usecase "Notifier patient : absence enregistree"as UC9
+    usecase "Notifier medecin : nouveau RDV"        as UC10
+    usecase "Notifier resultat disponible"          as UC11
+    usecase "Alerter directeur : no-show (>= 3)"   as UC12
+  }
+
+  package "Notifications Email" {
+    usecase "Envoyer email confirmation RDV"        as UC13
+    usecase "Envoyer email rappel RDV (24h avant)"  as UC14
+  }
+
+  package "API manuelle" {
+    usecase "Envoyer notification manuelle"         as UC15
+    usecase "Diffuser alerte directeur"             as UC16
+  }
+}
+
+' ---- Sources RabbitMQ ----
+RDV --> UC1
+RDV --> UC2
+RDV --> UC3
+RDV --> UC4
+
+' ---- Traitement des evenements ----
+UC1 ..> UC5  : <<include>>
+UC1 ..> UC10 : <<include>>
+UC1 ..> UC13 : <<extend>>\nsi patientEmail fourni
+UC2 ..> UC5  : <<include>>
+UC3 ..> UC6  : <<include>>
+UC4 ..> UC9  : <<include>>
+UC4 ..> UC12 : <<extend>>\nsi noShowCount >= 3
+
+' ---- Reception WebSocket (clients) ----
+P   <.. UC5  : WebSocket push
+P   <.. UC6  : WebSocket push
+P   <.. UC7  : WebSocket push
+P   <.. UC8  : WebSocket push
+P   <.. UC9  : WebSocket push
+P   <.. UC11 : WebSocket push
+M   <.. UC10 : WebSocket push
+D   <.. UC12 : WebSocket broadcast\n/topic/directeur
+
+' ---- Email ----
+P   <.. UC13 : Email SMTP
+P   <.. UC14 : Email SMTP
+
+' ---- API manuelle ----
+PAT --> UC11 : notifyResultReady(patientId)
+PAT --> UC8  : notifyWaitlistSlotAvailable(patientId)
+FE  --> UC15
+MOB --> UC15
+
+' ---- Connexion WebSocket des clients ----
+FE  --> UC5  : connecte via STOMP/SockJS\n/ws endpoint
+MOB --> UC5  : connecte via STOMP\n/ws endpoint
+
+@enduml

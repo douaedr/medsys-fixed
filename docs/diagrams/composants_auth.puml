@@ -25,6 +25,11 @@ package "ms-auth (:8082)" {
     database "ms_auth_db\n(MySQL :3307)" as DB
   }
 
+  package "Messaging Layer" {
+    [EventPublisher\n(RabbitMQ)] as EP
+    [RabbitMQConfig]             as RMQCFG
+  }
+
   package "Exception Handling" {
     [GlobalExceptionHandler] as GEH
     [AuthException] as AEX
@@ -33,6 +38,7 @@ package "ms-auth (:8082)" {
 
 [Frontend\n:5173] --> AC : REST HTTPS
 [Frontend\n:5173] --> ADC : REST HTTPS (ADMIN only)
+[App Mobile\n(Expo)] --> AC : REST HTTP (Bearer Token)
 
 SC --> JAF : configure filtre
 JAF --> JS : valide token
@@ -41,10 +47,24 @@ ADC --> AS
 AS --> UAR
 AS --> JS
 AS --> ES
+AS --> EP
 UAR --> DB
 GEH --> AEX
+EP --> RMQCFG
 
 [ms-patient\n:8081] <.. AS : POST /api/v1/patients\n(creer patient)
 [SMTP Server] <.. ES : envoi email
+
+' ---- Publication RabbitMQ ----
+[RabbitMQ\nmedsys.exchange] as RMQ
+EP ..> RMQ : user.created\n(routing key)\n→ auth.events.queue (audit)\n→ user.created.patient.queue (ms-patient)
+EP ..> RMQ : user.logged_in
+
+note bottom of EP
+  Exchange unique : medsys.exchange
+  Routing keys :
+  - user.created    → ms-patient ecoute
+  - user.logged_in  → audit interne
+end note
 
 @enduml

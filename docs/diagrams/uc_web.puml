@@ -1,0 +1,117 @@
+@startuml
+title Diagramme de Cas d'Utilisation - Frontend Web medsys-web (:5173)
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Visiteur"           as V
+actor "Patient"            as P
+actor "Medecin"            as M
+actor "Personnel"          as PERS
+actor "Admin"              as A
+actor "Directeur"          as D
+
+rectangle "medsys-web (React/Vite :5173)" {
+
+  package "Pages publiques" {
+    usecase "Voir la page d'accueil"                  as UC1
+    usecase "Choisir espace Patient ou Personnel"     as UC2
+    usecase "Se connecter (Patient)"                  as UC3
+    usecase "S'inscrire (Patient 6 etapes)"           as UC4
+    usecase "Se connecter (Personnel / Admin)"        as UC5
+    usecase "Reinitialiser son mot de passe"          as UC6
+  }
+
+  package "Tableau de bord Patient" {
+    usecase "Voir tableau de bord"                    as UC7
+    usecase "Consulter son dossier medical"           as UC8
+    usecase "Voir antecedents / consultations"        as UC9
+    usecase "Voir ordonnances"                        as UC10
+    usecase "Telecharger dossier en PDF"              as UC11
+    usecase "Obtenir QR Code dossier"                 as UC12
+    usecase "Uploader un document"                    as UC13
+    usecase "Voir mes documents"                      as UC14
+    usecase "Envoyer un message a un medecin"         as UC15
+    usecase "Voir mes messages"                       as UC16
+    usecase "Voir mes rendez-vous"                    as UC17
+    usecase "Annuler un rendez-vous"                  as UC18
+    usecase "Modifier mon profil"                     as UC19
+    usecase "Changer mon mot de passe"                as UC20
+    usecase "Recevoir notifications temps reel"       as UC21
+  }
+
+  package "Tableau de bord Medecin / Personnel" {
+    usecase "Voir liste des patients"                 as UC22
+    usecase "Rechercher un patient"                   as UC23
+    usecase "Consulter dossier d'un patient"          as UC24
+    usecase "Exporter PDF d'un dossier"               as UC25
+    usecase "Recevoir notifications (nouveau RDV)"    as UC26
+  }
+
+  package "Tableau de bord Admin" {
+    usecase "Creer compte medecin / personnel"        as UC27
+    usecase "Lister tous les comptes"                 as UC28
+    usecase "Activer / Desactiver un compte"          as UC29
+    usecase "Supprimer un compte"                     as UC30
+  }
+
+  package "Tableau de bord Directeur" {
+    usecase "Voir statistiques globales"              as UC31
+    usecase "Consulter liste patients"                as UC32
+    usecase "Voir agenda medecins"                    as UC33
+    usecase "Recevoir alertes no-show"                as UC34
+  }
+}
+
+' ---- Acteurs ----
+V    --> UC1
+V    --> UC2
+V    --> UC3
+V    --> UC4
+V    --> UC5
+V    --> UC6
+
+P    --> UC7
+P    --> UC8
+P    --> UC9
+P    --> UC10
+P    --> UC11
+P    --> UC12
+P    --> UC13
+P    --> UC14
+P    --> UC15
+P    --> UC16
+P    --> UC17
+P    --> UC18
+P    --> UC19
+P    --> UC20
+P    --> UC21
+
+M    --> UC22
+M    --> UC23
+M    --> UC24
+M    --> UC25
+M    --> UC26
+PERS --> UC22
+PERS --> UC23
+PERS --> UC24
+
+A    --> UC27
+A    --> UC28
+A    --> UC29
+A    --> UC30
+A    --> UC31
+
+D    --> UC31
+D    --> UC32
+D    --> UC33
+D    --> UC34
+
+' ---- Relations ----
+UC3  ..> UC7  : <<include>>\nauthentifie → redirect
+UC5  ..> UC22 : <<include>>\nauthentifie → redirect
+UC8  ..> UC9  : <<include>>
+UC8  ..> UC10 : <<include>>
+UC21 ..> UC34 : <<extend>>\nsi role DIRECTEUR
+UC4  ..> UC3  : <<include>>\naprès inscription
+
+@enduml

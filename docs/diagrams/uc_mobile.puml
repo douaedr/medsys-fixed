@@ -1,0 +1,62 @@
+@startuml
+title Diagramme de Cas d'Utilisation - App Mobile medsys-mobile (Expo/React Native)
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Patient (non connecte)"  as V
+actor "Patient (connecte)"      as P
+
+rectangle "medsys-mobile (Expo React Native)" {
+
+  package "Authentification" {
+    usecase "Se connecter"                       as UC1
+    usecase "S'inscrire (nouveau compte)"        as UC2
+    usecase "Reinitialiser mot de passe"         as UC3
+    usecase "Se deconnecter"                     as UC4
+  }
+
+  package "Tableau de bord (HomeScreen)" {
+    usecase "Voir informations personnelles"     as UC5
+    usecase "Voir prochain rendez-vous"          as UC6
+    usecase "Voir notifications recentes"        as UC7
+    usecase "Acceder aux actions rapides"        as UC8
+  }
+
+  package "Profil (ProfileScreen)" {
+    usecase "Voir profil complet"                as UC9
+    usecase "Voir infos medicales"               as UC10
+    usecase "Modifier profil"                    as UC11
+    usecase "Changer mot de passe"               as UC12
+  }
+}
+
+' ---- Acteurs ----
+V --> UC1
+V --> UC2
+V --> UC3
+
+P --> UC4
+P --> UC5
+P --> UC6
+P --> UC7
+P --> UC8
+P --> UC9
+P --> UC10
+P --> UC11
+P --> UC12
+
+' ---- Relations ----
+UC1 ..> UC5  : <<include>>\nauthentifie → HomeScreen
+UC2 ..> UC1  : <<include>>\naprès inscription
+UC5 ..> UC6  : <<include>>
+UC8 ..> UC6  : <<extend>>
+UC9 ..> UC10 : <<include>>
+
+note bottom
+  Tous les appels REST passent par :
+  AUTH_BASE = http://{LOCAL_IP}:8082/api/v1
+  PAT_BASE  = http://{LOCAL_IP}:8081/api/v1
+  (IP configurable dans src/api/api.js)
+end note
+
+@enduml

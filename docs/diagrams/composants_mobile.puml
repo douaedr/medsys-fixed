@@ -1,0 +1,79 @@
+@startuml
+title Diagramme de Composants - medsys-mobile (Expo / React Native)
+skinparam componentStyle rectangle
+
+package "medsys-mobile (Expo React Native)" {
+
+  package "Navigation (React Navigation)" {
+    [AppNavigator.js] as NAV
+    note right of NAV
+      AuthStack   : Login, Register, ForgotPassword
+      MainTabs    : Accueil (Home), Profil
+      Bascule auto selon isAuthenticated
+    end note
+  }
+
+  package "Context / Etat global" {
+    [AuthContext.js\n(user, token, login, logout)] as CTX
+  }
+
+  package "Ecrans Auth (AuthStack)" {
+    [LoginScreen.js]          as LS
+    [RegisterScreen.js]       as RS
+    [ForgotPasswordScreen.js] as FPS
+  }
+
+  package "Ecrans Principaux (MainTabs)" {
+    [HomeScreen.js\n(Tableau de bord)] as HS
+    [ProfileScreen.js\n(Profil patient)] as PS
+  }
+
+  package "Couche API (Axios)" {
+    [authApi\nAUTH_BASE = http://{IP}:8082/api/v1] as AAPI
+    [patientApi\nPAT_BASE  = http://{IP}:8081/api/v1] as PAPI
+  }
+
+  package "Theme" {
+    [theme/index.js\n(couleurs, styles)] as THEME
+  }
+}
+
+' ---- Microservices ----
+[ms-auth\n:8082]              as AUTH
+[ms-patient-personnel\n:8081] as PAT
+
+' ---- Navigation ----
+NAV --> CTX  : lit isAuthenticated
+NAV --> LS
+NAV --> RS
+NAV --> FPS
+NAV --> HS
+NAV --> PS
+
+' ---- Ecrans → Context ----
+LS  --> CTX  : login(token, user)
+FPS --> CTX
+HS  --> CTX  : lit user
+PS  --> CTX  : lit user
+
+' ---- Ecrans → API ----
+LS  --> AAPI : POST /auth/login
+RS  --> AAPI : POST /auth/register
+FPS --> AAPI : POST /auth/forgot-password
+HS  --> PAPI : GET /patient/me
+HS  --> AAPI : GET /auth/me (fallback)
+PS  --> PAPI : GET /patient/me
+PS  --> AAPI : POST /auth/change-password
+
+' ---- API → Microservices ----
+AAPI --> AUTH : REST HTTP (Bearer Token)
+PAPI --> PAT  : REST HTTP (Bearer Token)
+
+note bottom of AAPI
+  LOCAL_IP configurable dans src/api/api.js
+  const LOCAL_IP = '192.168.1.X'
+  Remplacer par IP de la machine
+  executant les microservices.
+end note
+
+@enduml
