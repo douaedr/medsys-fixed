@@ -12,36 +12,59 @@ import org.springframework.context.annotation.Configuration;
 public class RabbitMQConfig {
 
     // ── Exchanges ─────────────────────────────────────────────────────────────
-    public static final String PATIENT_EXCHANGE     = "patient.exchange";
-    public static final String APPOINTMENT_EXCHANGE = "appointment.exchange";
+    // medsys.exchange : événements RDV publiés par ms-rdv
+    public static final String MEDSYS_EXCHANGE  = "medsys.exchange";
+    // auth.exchange : événements auth publiés par ms-auth
+    public static final String AUTH_EXCHANGE    = "auth.exchange";
+    // patient.exchange : notifications sortantes vers ms-notify
+    public static final String PATIENT_EXCHANGE = "patient.exchange";
 
     // ── Queues ────────────────────────────────────────────────────────────────
-    public static final String PATIENT_QUEUE             = "patient.queue";
+    // patient.queue         : reçoit les événements RDV (appointment.created / cancelled) depuis ms-rdv
+    public static final String PATIENT_QUEUE              = "patient.queue";
+    // patient.auth.queue    : reçoit les événements user.created depuis ms-auth
+    public static final String PATIENT_AUTH_QUEUE         = "patient.auth.queue";
+    // patient.notification.queue : notifications sortantes
     public static final String PATIENT_NOTIFICATION_QUEUE = "patient.notification.queue";
 
-    // ── Routing keys (inbound) ────────────────────────────────────────────────
+    // ── Routing keys (inbound RDV) ────────────────────────────────────────────
     public static final String ROUTING_APPOINTMENT_CREATED   = "appointment.created";
     public static final String ROUTING_APPOINTMENT_CANCELLED = "appointment.cancelled";
 
+    // ── Routing keys (inbound Auth) ───────────────────────────────────────────
+    public static final String ROUTING_USER_CREATED = "user.created";
+
     // ── Routing keys (outbound) ───────────────────────────────────────────────
-    public static final String ROUTING_PATIENT_NOTIFICATION  = "patient.notification";
-    public static final String ROUTING_APPOINTMENT_REBOOK    = "appointment.rebook";
+    public static final String ROUTING_PATIENT_NOTIFICATION = "patient.notification";
+    public static final String ROUTING_APPOINTMENT_REBOOK   = "appointment.rebook";
 
     // ── Exchanges ─────────────────────────────────────────────────────────────
+
+    @Bean
+    public TopicExchange medsysExchange() {
+        return ExchangeBuilder.topicExchange(MEDSYS_EXCHANGE).durable(true).build();
+    }
+
+    @Bean
+    public TopicExchange authExchange() {
+        return ExchangeBuilder.topicExchange(AUTH_EXCHANGE).durable(true).build();
+    }
+
     @Bean
     public TopicExchange patientExchange() {
         return ExchangeBuilder.topicExchange(PATIENT_EXCHANGE).durable(true).build();
     }
 
-    @Bean
-    public TopicExchange appointmentExchange() {
-        return ExchangeBuilder.topicExchange(APPOINTMENT_EXCHANGE).durable(true).build();
-    }
-
     // ── Queues ────────────────────────────────────────────────────────────────
+
     @Bean
     public Queue patientQueue() {
         return QueueBuilder.durable(PATIENT_QUEUE).build();
+    }
+
+    @Bean
+    public Queue patientAuthQueue() {
+        return QueueBuilder.durable(PATIENT_AUTH_QUEUE).build();
     }
 
     @Bean
@@ -50,22 +73,35 @@ public class RabbitMQConfig {
     }
 
     // ── Bindings ──────────────────────────────────────────────────────────────
+
+    // RDV créé : medsys.exchange → patient.queue
     @Bean
     public Binding appointmentCreatedBinding(Queue patientQueue,
-                                              TopicExchange appointmentExchange) {
+                                              TopicExchange medsysExchange) {
         return BindingBuilder.bind(patientQueue)
-                .to(appointmentExchange)
+                .to(medsysExchange)
                 .with(ROUTING_APPOINTMENT_CREATED);
     }
 
+    // RDV annulé : medsys.exchange → patient.queue
     @Bean
     public Binding appointmentCancelledBinding(Queue patientQueue,
-                                                TopicExchange appointmentExchange) {
+                                                TopicExchange medsysExchange) {
         return BindingBuilder.bind(patientQueue)
-                .to(appointmentExchange)
+                .to(medsysExchange)
                 .with(ROUTING_APPOINTMENT_CANCELLED);
     }
 
+    // user.created : auth.exchange → patient.auth.queue (queue dédiée pour éviter conflit de type)
+    @Bean
+    public Binding userCreatedBinding(Queue patientAuthQueue,
+                                       TopicExchange authExchange) {
+        return BindingBuilder.bind(patientAuthQueue)
+                .to(authExchange)
+                .with(ROUTING_USER_CREATED);
+    }
+
+    // Notifications sortantes : patient.exchange → patient.notification.queue
     @Bean
     public Binding patientNotificationBinding(Queue patientNotificationQueue,
                                                TopicExchange patientExchange) {
@@ -74,7 +110,8 @@ public class RabbitMQConfig {
                 .with(ROUTING_PATIENT_NOTIFICATION);
     }
 
-    // ── JSON serialization (interoperable with .NET) ──────────────────────────
+    // ── JSON serialization (interoperable avec .NET) ──────────────────────────
+
     @Bean
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();

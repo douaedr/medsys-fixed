@@ -11,5 +11,5 @@ RUN groupadd --system appgroup && useradd --system --gid appgroup appuser
 COPY --from=builder /app/target/*.jar app.jar
 RUN chown appuser:appgroup app.jar
 USER appuser
-EXPOSE 8082
+EXPOSE 8084
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -21,6 +21,8 @@ public interface PatientRepository extends JpaRepository<Patient, Long> {
 
     Boolean existsByCin(String cin);
 
+    Boolean existsByEmail(String email);
+
     List<Patient> findByVilleIgnoreCase(String ville);
 
     List<Patient> findByGroupeSanguin(GroupeSanguin groupeSanguin);

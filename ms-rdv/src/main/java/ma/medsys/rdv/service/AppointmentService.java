@@ -157,17 +157,43 @@ public class AppointmentService {
 
     private void publishEvent(String queue, String routingKey, Appointment apt) {
         try {
-            Map<String, Object> payload = Map.of(
-                    "appointmentId", apt.getId(),
-                    "patientId", apt.getPatientId(),
-                    "medecinId", apt.getMedecinId(),
-                    "dateHeure", apt.getDateHeure().toString(),
-                    "status", apt.getStatus().name()
-            );
+            String medecinNomComplet  = buildFullName(apt.getMedecinNom(), apt.getMedecinPrenom());
+            String patientNomComplet  = buildFullName(apt.getPatientNom(), apt.getPatientPrenom());
+            String eventType = routingKey.toUpperCase().replace(".", "_"); // appointment.created → APPOINTMENT_CREATED
+
+            // Payload unifié : contient les champs attendus par ms-notify ET ms-patient-personnel
+            java.util.Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("eventType",       eventType);
+            payload.put("appointmentId",   apt.getId());
+            // Champs pour ms-notify
+            payload.put("patientId",       apt.getPatientId());
+            payload.put("medecinId",       apt.getMedecinId());
+            payload.put("medecinNom",      medecinNomComplet);
+            payload.put("patientNom",      patientNomComplet);
+            payload.put("dateHeure",       apt.getDateHeure().toString());
+            payload.put("patientEmail",    ""); // enrichi si disponible
+            payload.put("noShowCount",     apt.getNoShowCount());
+            // Champs pour ms-patient-personnel (AppointmentEvent)
+            payload.put("doctorId",        apt.getMedecinId());
+            payload.put("doctorName",      medecinNomComplet);
+            payload.put("appointmentDate", apt.getDateHeure().toString());
+            payload.put("specialty",       apt.getSpecialiteId() != null ? apt.getSpecialiteId().toString() : "");
+            payload.put("notes",           apt.getMotif() != null ? apt.getMotif() : "");
+            payload.put("timestamp",       java.time.LocalDateTime.now().toString());
+            payload.put("status",          apt.getStatus().name());
+
             rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, routingKey, payload);
+            log.info("[RabbitMQ] Event publié: routingKey={} appointmentId={}", routingKey, apt.getId());
         } catch (Exception ex) {
-            log.warn("Failed to publish RabbitMQ event '{}': {}", routingKey, ex.getMessage());
+            log.warn("[RabbitMQ] Échec publication event '{}': {}", routingKey, ex.getMessage());
         }
+    }
+
+    private String buildFullName(String nom, String prenom) {
+        if (nom == null && prenom == null) return "";
+        if (nom == null) return prenom;
+        if (prenom == null) return nom;
+        return nom + " " + prenom;
     }
 
     public AppointmentResponse toResponse(Appointment a) {

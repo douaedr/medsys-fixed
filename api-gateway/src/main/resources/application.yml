@@ -26,7 +26,7 @@ spring:
       routes:
         # Auth service - public endpoints (no JWT required)
         - id: auth-service-public
-          uri: http://localhost:8082
+          uri: ${MS_AUTH_URL:http://localhost:8082}
           predicates:
             - Path=/api/v1/auth/**
           filters:
@@ -34,7 +34,7 @@ spring:
 
         # Auth service - admin endpoints (JWT required)
         - id: auth-service-admin
-          uri: http://localhost:8082
+          uri: ${MS_AUTH_URL:http://localhost:8082}
           predicates:
             - Path=/api/v1/admin/**
           filters:
@@ -43,7 +43,7 @@ spring:
 
         # Patient/Personnel service
         - id: patient-service
-          uri: http://localhost:8081
+          uri: ${MS_PATIENT_URL:http://localhost:8081}
           predicates:
             - Path=/api/v1/patients/**, /api/v1/patient/**, /api/v1/directeur/**, /api/v1/doctors/**
           filters:
@@ -52,7 +52,7 @@ spring:
 
         # Appointment (RDV) service
         - id: rdv-service
-          uri: http://localhost:8083
+          uri: ${MS_RDV_URL:http://localhost:8083}
           predicates:
             - Path=/api/v1/rdv/**
           filters:
@@ -61,7 +61,7 @@ spring:
 
         # Personnel service (.NET)
         - id: personnel-service
-          uri: http://localhost:5130
+          uri: ${MS_PERSONNEL_URL:http://localhost:5130}
           predicates:
             - Path=/api/personnel/**
           filters:
@@ -70,14 +70,14 @@ spring:
 
         # Notification service
         - id: notify-service
-          uri: http://localhost:8084
+          uri: ${MS_NOTIFY_URL:http://localhost:8084}
           predicates:
             - Path=/api/v1/notifications/**, /ws/**
           filters:
             - name: LoggingFilter
 
 jwt:
-  secret: medsys-hospital-jwt-secret-key-2026-very-long-and-secure-production-key-minimum-256-bits
+  secret: ${JWT_SECRET:medsys-hospital-jwt-secret-key-2026-very-long-and-secure-production-key-minimum-256-bits}
 
 management:
   endpoints:

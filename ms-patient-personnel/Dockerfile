@@ -1,14 +1,13 @@
-FROM openjdk:21-jdk-slim AS builder
+FROM maven:3.9-eclipse-temurin-21 AS builder
 WORKDIR /app
-COPY .mvn/ .mvn/
-COPY mvnw pom.xml ./
-RUN chmod +x mvnw && ./mvnw dependency:go-offline -q
+COPY pom.xml ./
+RUN mvn dependency:go-offline -q
 COPY src ./src
-RUN ./mvnw clean package -DskipTests -q
+RUN mvn clean package -DskipTests -q
 
-FROM openjdk:21-jdk-slim
+FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+RUN groupadd --system appgroup && useradd --system --gid appgroup appuser
 COPY --from=builder /app/target/*.jar app.jar
 RUN mkdir -p uploads/patients && chown -R appuser:appgroup uploads
 RUN chown appuser:appgroup app.jar
