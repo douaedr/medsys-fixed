@@ -21,61 +21,59 @@ public class RdvProxyService {
     private final RestTemplate restTemplate = new RestTemplate();
 
     /**
-     * Récupère les rendez-vous d'un patient depuis le ms-rdv.
-     * Retourne une liste vide si ms-rdv n'est pas configuré ou injoignable.
+     * Récupère les rendez-vous d'un patient depuis ms-rdv.
+     * Endpoint : GET /api/v1/rdv/appointments/patient/{patientId}
      */
     public List<RendezVousDTO> getRdvPatient(Long patientId) {
         if (msRdvUrl == null || msRdvUrl.isBlank()) {
             log.debug("ms-rdv.url non configuré, retour liste vide");
             return List.of();
         }
-
         try {
             String url = UriComponentsBuilder.fromHttpUrl(msRdvUrl)
-                    .path("/api/v1/rdv/patient/{patientId}")
+                    .path("/api/v1/rdv/appointments/patient/{patientId}")
                     .buildAndExpand(patientId)
                     .toUriString();
             ResponseEntity<List<RendezVousDTO>> response = restTemplate.exchange(
-                url,
-                HttpMethod.GET,
-                null,
-                new ParameterizedTypeReference<>() {}
-            );
+                    url, HttpMethod.GET, null, new ParameterizedTypeReference<>() {});
             return response.getBody() != null ? response.getBody() : List.of();
         } catch (Exception e) {
-            log.warn("Impossible de joindre ms-rdv ({}): {}", msRdvUrl, e.getMessage());
+            log.warn("Impossible de joindre ms-rdv getRdvPatient({}): {}", patientId, e.getMessage());
             return List.of();
         }
     }
 
     /**
-     * Récupère tous les rendez-vous depuis le ms-rdv (vue directeur).
+     * Récupère tous les rendez-vous depuis ms-rdv (vue directeur).
+     * Endpoint : GET /api/v1/rdv/appointments
      */
     public List<RendezVousDTO> getAllRdv() {
         if (msRdvUrl == null || msRdvUrl.isBlank()) return List.of();
         try {
-            String url = msRdvUrl + "/api/v1/rdv";
+            String url = msRdvUrl + "/api/v1/rdv/appointments";
             ResponseEntity<List<RendezVousDTO>> response = restTemplate.exchange(
-                url, HttpMethod.GET, null, new ParameterizedTypeReference<>() {});
+                    url, HttpMethod.GET, null, new ParameterizedTypeReference<>() {});
             return response.getBody() != null ? response.getBody() : List.of();
         } catch (Exception e) {
-            log.warn("Impossible de joindre ms-rdv (getAllRdv): {}", e.getMessage());
+            log.warn("Impossible de joindre ms-rdv getAllRdv: {}", e.getMessage());
             return List.of();
         }
     }
 
     /**
-     * Annule un rendez-vous via le ms-rdv.
+     * Annule un rendez-vous via ms-rdv.
+     * Endpoint : PATCH /api/v1/rdv/appointments/{id}/cancel?reason=...
      */
     public boolean annulerRdv(Long rdvId, Long patientId) {
         if (msRdvUrl == null || msRdvUrl.isBlank()) return false;
         try {
             String url = UriComponentsBuilder.fromHttpUrl(msRdvUrl)
-                    .path("/api/v1/rdv/{rdvId}/annuler")
-                    .queryParam("patientId", patientId)
+                    .path("/api/v1/rdv/appointments/{rdvId}/cancel")
+                    .queryParam("reason", "Annulé par le patient (id=" + patientId + ")")
                     .buildAndExpand(rdvId)
                     .toUriString();
-            restTemplate.put(url, null);
+            restTemplate.exchange(url, HttpMethod.PATCH, HttpEntity.EMPTY, Void.class);
+            log.info("RDV {} annulé avec succès via ms-rdv", rdvId);
             return true;
         } catch (Exception e) {
             log.warn("Impossible d'annuler RDV {} via ms-rdv: {}", rdvId, e.getMessage());

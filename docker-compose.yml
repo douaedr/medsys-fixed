@@ -255,8 +255,15 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       MongoDB__ConnectionString: mongodb://mongodb:27017
       MongoDB__DatabaseName: PersonnelMS
+      RabbitMQ__Host: rabbitmq
+      RabbitMQ__Port: 5672
+      RabbitMQ__Username: guest
+      RabbitMQ__Password: guest
+      RabbitMQ__VirtualHost: /
     depends_on:
       mongodb:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
     networks:

@@ -12,8 +12,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -23,6 +25,26 @@ public class StatsService {
 
     private final AppointmentRepository appointmentRepo;
     private final TimeSlotRepository slotRepo;
+
+    /**
+     * Calcule le délai moyen en jours entre la création d'un RDV (createdAt)
+     * et la date effective du RDV (dateHeure), pour les RDV confirmés ou complétés.
+     * Retourne 0.0 si aucune donnée disponible.
+     */
+    private double computeAvgWaitDays(List<Appointment> appointments) {
+        OptionalDouble avg = appointments.stream()
+                .filter(a -> a.getCreatedAt() != null && a.getDateHeure() != null)
+                .filter(a -> a.getStatus() == AppointmentStatus.CONFIRMED
+                          || a.getStatus() == AppointmentStatus.COMPLETED)
+                .mapToLong(a -> ChronoUnit.DAYS.between(
+                        a.getCreatedAt().toLocalDate(),
+                        a.getDateHeure().toLocalDate()))
+                .filter(days -> days >= 0)
+                .average();
+        double result = avg.isPresent() ? Math.round(avg.getAsDouble() * 10.0) / 10.0 : 0.0;
+        log.debug("avgWaitDays calculé: {}", result);
+        return result;
+    }
 
     public StatsOverview getOverview(LocalDate from, LocalDate to) {
         LocalDateTime start = from.atStartOfDay();
@@ -77,7 +99,7 @@ public class StatsService {
                 .map(e -> Map.<String, Object>of("specialiteId", e.getKey(), "count", e.getValue()))
                 .collect(Collectors.toList());
 
-        log.info("Stats overview computed: from={}, to={}, total={}", from, to, total);
+        log.info("Stats overview: from={} to={} total={}", from, to, total);
 
         return StatsOverview.builder()
                 .totalAppointments(total)
@@ -86,7 +108,7 @@ public class StatsService {
                 .noShows(noShows)
                 .completionRate(Math.round(completionRate * 10.0) / 10.0)
                 .fillRate(Math.round(fillRate * 10.0) / 10.0)
-                .avgWaitDays(2.5) // TODO: compute from actual scheduling data
+                .avgWaitDays(computeAvgWaitDays(appointments))
                 .byDay(byDay)
                 .byDoctor(byDoctor)
                 .bySpecialite(bySpecialite)

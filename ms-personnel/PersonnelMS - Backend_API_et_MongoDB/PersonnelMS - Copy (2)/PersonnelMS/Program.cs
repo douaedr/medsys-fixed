@@ -1,6 +1,7 @@
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using MongoDB.Driver;
+using PersonnelMS.Messaging;
 using Serilog;
 
 Log.Logger = new LoggerConfiguration()
@@ -15,6 +16,12 @@ builder.Host.UseSerilog();
 // configuration MongoDB
 builder.Services.Configure<PersonnelMS.Configurations.MongoSettings>(
     builder.Configuration.GetSection("MongoDB"));
+
+// configuration RabbitMQ
+builder.Services.Configure<RabbitMQSettings>(
+    builder.Configuration.GetSection("RabbitMQ"));
+// Consumer RabbitMQ (écoute auth.exchange → user.created)
+builder.Services.AddHostedService<UserEventConsumer>();
 
 // Add Mongo client and database
 builder.Services.AddSingleton(sp =>

@@ -77,4 +77,4 @@ ms-auth:
   url: ${MS_AUTH_URL:http://localhost:8082}
 
 ms-rdv:
-  url: ${MS_RDV_URL:}
+  url: ${MS_RDV_URL:http://localhost:8083}
