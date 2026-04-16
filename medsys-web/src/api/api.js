@@ -66,6 +66,19 @@ export const patientApi = {
   // Rendez-vous
   getRdv: () => PATIENT_API.get('/patient/me/rdv'),
   annulerRdv: (id) => PATIENT_API.put(`/patient/me/rdv/${id}/annuler`),
+  prendreRdv: (data) => PATIENT_API.post('/rdv/appointments', data),
+}
+
+export const medecinApi = {
+  // Messagerie médecin-patient
+  getMessages: (patientId) => PATIENT_API.get(`/medecin/patients/${patientId}/messages`),
+  sendMessage: (patientId, data) => PATIENT_API.post(`/medecin/patients/${patientId}/messages`, data),
+  marquerLu: (patientId, messageId) => PATIENT_API.put(`/medecin/patients/${patientId}/messages/${messageId}/lu`),
+
+  // Patients (liste pour choisir à qui écrire)
+  getPatients: (params) => PATIENT_API.get('/patients', { params }),
+  searchPatients: (q, params) => PATIENT_API.get('/patients/search', { params: { q, ...params } }),
+  getDossier: (patientId) => PATIENT_API.get(`/patients/${patientId}/dossier`),
 }
 
 export const directeurApi = {

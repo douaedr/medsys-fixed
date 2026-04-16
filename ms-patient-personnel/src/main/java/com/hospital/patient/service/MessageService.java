@@ -7,6 +7,7 @@ import com.hospital.patient.entity.MessagePatient;
 import com.hospital.patient.entity.Patient;
 import com.hospital.patient.enums.ExpediteurMessage;
 import com.hospital.patient.exception.PatientNotFoundException;
+import com.hospital.patient.messaging.NotificationPublisher;
 import com.hospital.patient.repository.MessagePatientRepository;
 import com.hospital.patient.repository.PatientRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ public class MessageService {
 
     private final MessagePatientRepository messageRepository;
     private final PatientRepository patientRepository;
+    private final NotificationPublisher notificationPublisher;
 
     @Transactional(readOnly = true)
     public List<MessagePatientDTO> getMessages(Long patientId) {
@@ -54,7 +56,36 @@ public class MessageService {
                 .lu(false)
                 .build();
 
-        return toDTO(messageRepository.save(message));
+        MessagePatient saved = messageRepository.save(message);
+        // Notifier le médecin via RabbitMQ (le médecin est inconnu ici, notification générale)
+        try {
+            notificationPublisher.publishMessageSent(null, "Patient", req.getContenu());
+        } catch (Exception ignored) {}
+        return toDTO(saved);
+    }
+
+    @Transactional
+    public MessagePatientDTO envoyerMessageMedecin(Long medecinId, Long patientId,
+                                                    String contenu, String medecinNom) {
+        Patient patient = patientRepository.findById(patientId)
+                .orElseThrow(() -> new PatientNotFoundException("Patient non trouvé"));
+
+        DossierMedical dossier = patient.getDossierMedical();
+        if (dossier == null) throw new PatientNotFoundException("Dossier médical non trouvé");
+
+        MessagePatient message = MessagePatient.builder()
+                .dossierMedical(dossier)
+                .contenu(contenu)
+                .expediteur(ExpediteurMessage.MEDECIN)
+                .medecinId(medecinId)
+                .medecinNom(medecinNom)
+                .lu(false)
+                .build();
+
+        MessagePatient saved = messageRepository.save(message);
+        // Notifier le patient via RabbitMQ
+        notificationPublisher.publishMessageSent(patientId, medecinNom, contenu);
+        return toDTO(saved);
     }
 
     @Transactional

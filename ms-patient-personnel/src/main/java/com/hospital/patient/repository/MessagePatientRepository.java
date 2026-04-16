@@ -13,4 +13,7 @@ public interface MessagePatientRepository extends JpaRepository<MessagePatient, 
     List<MessagePatient> findByDossierMedicalIdOrderByDateEnvoiAsc(Long dossierId);
 
     long countByDossierMedicalIdAndLuFalseAndExpediteur(Long dossierId, ExpediteurMessage expediteur);
+
+    // Pour le portail médecin : tous les messages d'un médecin (pour lister ses conversations)
+    List<MessagePatient> findByMedecinIdOrderByDateEnvoiDesc(Long medecinId);
 }

@@ -57,6 +57,14 @@ public class JwtService {
         return extractClaims(token).get("patientId", Long.class);
     }
 
+    // Pour les tokens ms-auth (non-patient), qui utilisent "userId"
+    public Long extractUserId(String token) {
+        Claims claims = extractClaims(token);
+        Long userId = claims.get("userId", Long.class);
+        if (userId == null) userId = claims.get("patientId", Long.class);
+        return userId;
+    }
+
     public String extractRole(String token) {
         String role = extractClaims(token).get("role", String.class);
         return role != null ? role : "PATIENT";

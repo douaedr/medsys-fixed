@@ -45,6 +45,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/patients/**").hasAnyRole("DIRECTEUR", "ADMIN", "MEDECIN")
                 .requestMatchers("/api/v1/patient/**").hasRole("PATIENT")
                 .requestMatchers("/api/v1/directeur/**").hasAnyRole("DIRECTEUR", "ADMIN")
+                .requestMatchers("/api/v1/medecin/**").hasAnyRole("MEDECIN", "ADMIN", "DIRECTEUR")
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)

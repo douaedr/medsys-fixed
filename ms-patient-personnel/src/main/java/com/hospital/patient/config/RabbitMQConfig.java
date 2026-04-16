@@ -26,6 +26,7 @@ public class RabbitMQConfig {
     // ── Routing keys (outbound) ───────────────────────────────────────────────
     public static final String ROUTING_PATIENT_NOTIFICATION  = "patient.notification";
     public static final String ROUTING_APPOINTMENT_REBOOK    = "appointment.rebook";
+    public static final String ROUTING_MESSAGE_SENT          = "message.sent";
 
     // ── Exchanges ─────────────────────────────────────────────────────────────
     @Bean

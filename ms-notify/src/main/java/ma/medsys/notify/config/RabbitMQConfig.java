@@ -50,11 +50,21 @@ public class RabbitMQConfig {
         return new Queue("appointment.confirmed", true);
     }
 
-    // ── Exchange ────────────────────────────────────────────────────────────
+    @Bean
+    public Queue messageNotificationQueue() {
+        return new Queue("message.notification", true);
+    }
+
+    // ── Exchanges ───────────────────────────────────────────────────────────
 
     @Bean
     public TopicExchange medsysExchange() {
         return new TopicExchange("medsys.exchange");
+    }
+
+    @Bean
+    public TopicExchange patientExchange() {
+        return new TopicExchange("patient.exchange");
     }
 
     // ── Bindings ────────────────────────────────────────────────────────────
@@ -89,6 +99,14 @@ public class RabbitMQConfig {
                 .bind(appointmentConfirmedQueue)
                 .to(medsysExchange)
                 .with("appointment.confirmed");
+    }
+
+    @Bean
+    public Binding bindingMessageSent(Queue messageNotificationQueue, TopicExchange patientExchange) {
+        return BindingBuilder
+                .bind(messageNotificationQueue)
+                .to(patientExchange)
+                .with("message.sent");
     }
 
     // ── Message converter & template ────────────────────────────────────────

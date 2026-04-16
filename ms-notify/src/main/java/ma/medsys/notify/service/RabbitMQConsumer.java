@@ -191,6 +191,44 @@ public class RabbitMQConsumer {
         }
     }
 
+    // ── message.notification ─────────────────────────────────────────────────
+
+    /**
+     * Handle a {@code message.sent} event from {@code ms-patient-personnel}.
+     *
+     * <p>Expected payload fields:</p>
+     * <ul>
+     *   <li>{@code recipientId}     — Long (patient or medecin to notify)</li>
+     *   <li>{@code senderName}      — String</li>
+     *   <li>{@code messagePreview}  — String</li>
+     * </ul>
+     */
+    @RabbitListener(queues = "message.notification")
+    public void handleMessageSent(Map<String, Object> event) {
+        log.info("Received message.sent event: {}", event);
+        try {
+            Object recipientIdObj = event.get("recipientId");
+            if (recipientIdObj == null) {
+                log.debug("message.sent event has no recipientId — skipping push");
+                return;
+            }
+            Long recipientId = Long.valueOf(recipientIdObj.toString());
+            String senderName = stringOrDefault(event, "senderName", "l'équipe médicale");
+            String preview    = stringOrDefault(event, "messagePreview", "Nouveau message");
+
+            NotificationMessage notif = NotificationMessage.builder()
+                    .type("MESSAGE_RECEIVED")
+                    .title("Nouveau message de " + senderName)
+                    .message(preview)
+                    .build();
+
+            notificationService.sendToUser(recipientId.toString(), notif);
+
+        } catch (Exception e) {
+            log.error("Error processing message.sent event: {}", e.getMessage(), e);
+        }
+    }
+
     // ── Utilities ────────────────────────────────────────────────────────────
 
     private Long parseLong(Map<String, Object> event, String key) {

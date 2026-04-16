@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { patientApi, adminApi, directeurApi } from '../api/api'
+import { patientApi, adminApi, directeurApi, medecinApi } from '../api/api'
+import { Client } from '@stomp/stompjs'
+import SockJS from 'sockjs-client'
 
 // ── Navbar partagée ─────────────────────────────────────────────────────────
 function Navbar({ role, notifCount = 0 }) {
@@ -346,24 +348,56 @@ function DocumentsSection() {
 
 // ── Messagerie ────────────────────────────────────────────────────────────
 function MessagerieSection() {
+  const { user } = useAuth()
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
   const [contenu, setContenu] = useState('')
   const [error, setError] = useState('')
+  const [connected, setConnected] = useState(false)
   const bottomRef = useRef(null)
+  const stompRef = useRef(null)
 
-  const load = async () => {
-    setLoading(true)
+  const load = useCallback(async () => {
     try {
-      const r = await patientApi.getMessages(); setMessages(r.data)
-      // Marquer les messages du médecin comme lus
-      r.data.filter(m => m.expediteur === 'MEDECIN' && !m.lu).forEach(m => patientApi.marquerLu(m.id).catch(() => {}))
+      const r = await patientApi.getMessages()
+      setMessages(r.data)
+      r.data.filter(m => m.expediteur === 'MEDECIN' && !m.lu)
+            .forEach(m => patientApi.marquerLu(m.id).catch(() => {}))
     } catch { setError('Impossible de charger les messages.') }
     finally { setLoading(false) }
-  }
+  }, [])
 
-  useEffect(() => { load() }, [])
+  // Chargement initial + polling 10s comme fallback WebSocket
+  useEffect(() => {
+    setLoading(true)
+    load()
+    const interval = setInterval(load, 10000)
+    return () => clearInterval(interval)
+  }, [load])
+
+  // WebSocket STOMP pour temps réel
+  useEffect(() => {
+    if (!user?.userId) return
+    const client = new Client({
+      webSocketFactory: () => new SockJS('/ws'),
+      reconnectDelay: 5000,
+      onConnect: () => {
+        setConnected(true)
+        client.subscribe(`/user/${user.userId}/queue/notifications`, (frame) => {
+          try {
+            const notif = JSON.parse(frame.body)
+            if (notif.type === 'MESSAGE_RECEIVED') load()
+          } catch {}
+        })
+      },
+      onDisconnect: () => setConnected(false),
+    })
+    client.activate()
+    stompRef.current = client
+    return () => { client.deactivate() }
+  }, [user?.userId, load])
+
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   const handleSend = async (e) => {
@@ -371,6 +405,7 @@ function MessagerieSection() {
     if (!contenu.trim()) return
     setSending(true); setError('')
     try {
+      // medecinId et medecinNom sont optionnels côté backend
       const r = await patientApi.envoyerMessage({ contenu: contenu.trim() })
       setMessages(m => [...m, r.data]); setContenu('')
     } catch (err) { setError(err.response?.data?.message || 'Erreur envoi.') }
@@ -383,8 +418,11 @@ function MessagerieSection() {
     <div>
       {error && <div className="alert alert-error" style={{ marginBottom: 10 }}>⚠️ {error}</div>}
       <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-        <div style={{ background: '#f8fafc', padding: '10px 16px', borderBottom: '1px solid var(--border)', fontSize: 13, color: 'var(--gray)' }}>
-          💬 Messagerie avec l'équipe médicale
+        <div style={{ background: '#f8fafc', padding: '10px 16px', borderBottom: '1px solid var(--border)', fontSize: 13, color: 'var(--gray)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>💬 Messagerie avec l'équipe médicale</span>
+          <span style={{ fontSize: 11, color: connected ? '#059669' : '#9ca3af' }}>
+            {connected ? '● Temps réel' : '○ Polling 10s'}
+          </span>
         </div>
         <div style={{ height: 360, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 10, background: '#fafafa' }}>
           {loading ? <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
@@ -703,6 +741,7 @@ export function PatientDashboard() {
     { key: 'accueil',    label: '🏠 Accueil' },
     { key: 'dossier',   label: '📁 Dossier médical' },
     { key: 'rdv',       label: '📅 Mes RDV' },
+    { key: 'prendreRdv',label: '➕ Prendre RDV' },
     { key: 'documents', label: '📂 Documents' },
     { key: 'messagerie',label: '💬 Messagerie', badge: notifs.messagesNonLus },
     { key: 'outils',    label: '🔧 QR / PDF' },
@@ -806,6 +845,12 @@ export function PatientDashboard() {
             <RendezVousSection />
           </div>
         )}
+        {view === 'prendreRdv' && (
+          <div>
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>➕ Prendre un rendez-vous</h2>
+            <PrendreRdvSection />
+          </div>
+        )}
         {view === 'documents' && (
           <div>
             <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>📂 Mes documents médicaux</h2>
@@ -837,11 +882,270 @@ export function PatientDashboard() {
   )
 }
 
+// ── Prise de RDV patient ──────────────────────────────────────────────────
+function PrendreRdvSection() {
+  const [medecins, setMedecins] = useState([])
+  const [form, setForm] = useState({ medecinId: '', dateHeure: '', motif: '', notes: '' })
+  const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    directeurApi.medecins()
+      .then(r => setMedecins(r.data || []))
+      .catch(() => {})
+  }, [])
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!form.medecinId || !form.dateHeure) { setError('Veuillez choisir un médecin et une date.'); return }
+    setLoading(true); setError(''); setSuccess('')
+    try {
+      await patientApi.prendreRdv({
+        medecinId: Number(form.medecinId),
+        dateHeure: form.dateHeure,
+        motif: form.motif,
+        notes: form.notes,
+      })
+      setSuccess('Votre demande de rendez-vous a été envoyée. Vous serez contacté(e) pour confirmation.')
+      setForm({ medecinId: '', dateHeure: '', motif: '', notes: '' })
+    } catch (err) {
+      setError(err.response?.data?.message || 'Erreur lors de la prise de RDV. Vérifiez que le service est disponible.')
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <div>
+      {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>⚠️ {error}</div>}
+      {success && <div className="alert alert-success" style={{ marginBottom: 12 }}>✅ {success}</div>}
+      <div className="card" style={{ maxWidth: 560, padding: 24 }}>
+        <div style={{ fontFamily: 'Syne', fontWeight: 700, marginBottom: 18, fontSize: 15 }}>📅 Demander un rendez-vous</div>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Médecin *</label>
+            <select className="form-select" value={form.medecinId} onChange={e => setForm(f => ({ ...f, medecinId: e.target.value }))} required>
+              <option value="">— Choisir un médecin —</option>
+              {medecins.map(m => (
+                <option key={m.id} value={m.id}>{m.nomComplet}{m.specialite ? ` — ${m.specialite}` : ''}</option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Date et heure souhaitées *</label>
+            <input className="form-input" type="datetime-local" value={form.dateHeure}
+              onChange={e => setForm(f => ({ ...f, dateHeure: e.target.value }))} required
+              min={new Date().toISOString().slice(0, 16)} />
+          </div>
+          <div className="form-group" style={{ marginBottom: 14 }}>
+            <label className="form-label">Motif de consultation</label>
+            <input className="form-input" value={form.motif} onChange={e => setForm(f => ({ ...f, motif: e.target.value }))}
+              placeholder="Ex: Consultation générale, suivi…" maxLength={200} />
+          </div>
+          <div className="form-group" style={{ marginBottom: 18 }}>
+            <label className="form-label">Notes complémentaires</label>
+            <textarea className="form-input" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Informations supplémentaires…" rows={3} maxLength={500}
+              style={{ resize: 'vertical' }} />
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={loading}>
+            {loading ? <span className="spinner" /> : '📅 Envoyer la demande'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ── Messagerie médecin (dans PersonnelDashboard) ───────────────────────────
+function MedecinMessagerieSection() {
+  const { user } = useAuth()
+  const [patients, setPatients] = useState([])
+  const [selectedPatient, setSelectedPatient] = useState(null)
+  const [messages, setMessages] = useState([])
+  const [contenu, setContenu] = useState('')
+  const [loadingPatients, setLoadingPatients] = useState(false)
+  const [loadingMessages, setLoadingMessages] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [search, setSearch] = useState('')
+  const [error, setError] = useState('')
+  const [connected, setConnected] = useState(false)
+  const bottomRef = useRef(null)
+  const stompRef = useRef(null)
+
+  const loadPatients = useCallback(async (q = '') => {
+    setLoadingPatients(true)
+    try {
+      const r = q.trim()
+        ? await medecinApi.searchPatients(q, { page: 0, size: 20 })
+        : await medecinApi.getPatients({ page: 0, size: 20 })
+      setPatients(r.data.content || [])
+    } catch { setError('Impossible de charger la liste des patients.') }
+    finally { setLoadingPatients(false) }
+  }, [])
+
+  const loadMessages = useCallback(async (patientId) => {
+    setLoadingMessages(true)
+    try {
+      const r = await medecinApi.getMessages(patientId)
+      setMessages(r.data)
+    } catch { setError('Impossible de charger les messages.') }
+    finally { setLoadingMessages(false) }
+  }, [])
+
+  useEffect(() => { loadPatients() }, [loadPatients])
+
+  // Polling 10s quand un patient est sélectionné
+  useEffect(() => {
+    if (!selectedPatient) return
+    const interval = setInterval(() => loadMessages(selectedPatient.id), 10000)
+    return () => clearInterval(interval)
+  }, [selectedPatient, loadMessages])
+
+  // WebSocket STOMP
+  useEffect(() => {
+    if (!user?.userId) return
+    const client = new Client({
+      webSocketFactory: () => new SockJS('/ws'),
+      reconnectDelay: 5000,
+      onConnect: () => {
+        setConnected(true)
+        client.subscribe(`/user/${user.userId}/queue/notifications`, (frame) => {
+          try {
+            const notif = JSON.parse(frame.body)
+            if (notif.type === 'MESSAGE_RECEIVED' && selectedPatient)
+              loadMessages(selectedPatient.id)
+          } catch {}
+        })
+      },
+      onDisconnect: () => setConnected(false),
+    })
+    client.activate()
+    stompRef.current = client
+    return () => { client.deactivate() }
+  }, [user?.userId, selectedPatient, loadMessages])
+
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  const selectPatient = (p) => {
+    setSelectedPatient(p)
+    setMessages([])
+    loadMessages(p.id)
+  }
+
+  const handleSend = async (e) => {
+    e.preventDefault()
+    if (!contenu.trim() || !selectedPatient) return
+    setSending(true); setError('')
+    try {
+      const r = await medecinApi.sendMessage(selectedPatient.id, { contenu: contenu.trim() })
+      setMessages(m => [...m, r.data]); setContenu('')
+    } catch (err) { setError(err.response?.data?.message || 'Erreur envoi.') }
+    finally { setSending(false) }
+  }
+
+  const fmtTime = (d) => d ? new Date(d).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, height: 500 }}>
+      {/* Liste patients */}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '10px 12px', background: '#f8fafc', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: 600 }}>
+          👥 Patients
+        </div>
+        <div style={{ padding: 8 }}>
+          <input className="form-input" value={search}
+            onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && loadPatients(search)}
+            placeholder="Rechercher…" style={{ fontSize: 12, padding: '6px 10px' }} />
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {loadingPatients
+            ? <div style={{ textAlign: 'center', padding: 20 }}><span className="spinner" /></div>
+            : patients.map(p => (
+              <div key={p.id} onClick={() => selectPatient(p)}
+                style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', fontSize: 13,
+                  background: selectedPatient?.id === p.id ? '#eff6ff' : 'white',
+                  fontWeight: selectedPatient?.id === p.id ? 700 : 400 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#dbeafe',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>
+                    {p.prenom?.[0]}{p.nom?.[0]}
+                  </div>
+                  <span>{p.prenom} {p.nom}</span>
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
+
+      {/* Zone messages */}
+      <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ background: '#f8fafc', padding: '10px 16px', borderBottom: '1px solid var(--border)', fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
+          <span>{selectedPatient ? `💬 ${selectedPatient.prenom} ${selectedPatient.nom}` : '💬 Sélectionner un patient'}</span>
+          <span style={{ fontSize: 11, color: connected ? '#059669' : '#9ca3af' }}>
+            {connected ? '● Temps réel' : '○ Polling 10s'}
+          </span>
+        </div>
+        {error && <div className="alert alert-error" style={{ margin: 8, fontSize: 12 }}>⚠️ {error}</div>}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 10, background: '#fafafa' }}>
+          {!selectedPatient
+            ? <div style={{ textAlign: 'center', color: 'var(--gray)', padding: 40 }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>👈</div>
+                <div>Sélectionnez un patient pour voir ses messages</div>
+              </div>
+            : loadingMessages
+              ? <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+              : messages.length === 0
+                ? <div style={{ textAlign: 'center', color: 'var(--gray)', padding: 40 }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>💬</div>
+                    <div>Aucun message. Commencez la conversation.</div>
+                  </div>
+                : messages.map(m => {
+                  const isMedecin = m.expediteur === 'MEDECIN'
+                  return (
+                    <div key={m.id} style={{ display: 'flex', justifyContent: isMedecin ? 'flex-end' : 'flex-start' }}>
+                      <div style={{ maxWidth: '72%' }}>
+                        {!isMedecin && (
+                          <div style={{ fontSize: 11, color: '#059669', fontWeight: 600, marginBottom: 2, paddingLeft: 4 }}>
+                            👤 {selectedPatient.prenom} {selectedPatient.nom}
+                          </div>
+                        )}
+                        <div style={{
+                          background: isMedecin ? '#2563eb' : 'white', color: isMedecin ? 'white' : '#1e293b',
+                          padding: '10px 14px', borderRadius: isMedecin ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                          fontSize: 13, boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                          border: isMedecin ? 'none' : '1px solid var(--border)'
+                        }}>{m.contenu}</div>
+                        <div style={{ fontSize: 10, color: 'var(--gray)', marginTop: 3, textAlign: isMedecin ? 'right' : 'left', paddingLeft: 4, paddingRight: 4 }}>
+                          {fmtTime(m.dateEnvoi)}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+          <div ref={bottomRef} />
+        </div>
+        {selectedPatient && (
+          <form onSubmit={handleSend} style={{ display: 'flex', gap: 8, padding: 12, borderTop: '1px solid var(--border)', background: 'white' }}>
+            <input className="form-input" value={contenu} onChange={e => setContenu(e.target.value)}
+              placeholder="Répondre au patient…" style={{ flex: 1, borderRadius: 20, padding: '8px 16px' }}
+              maxLength={1000} />
+            <button className="btn btn-primary" type="submit" disabled={sending || !contenu.trim()} style={{ borderRadius: 20, padding: '8px 20px' }}>
+              {sending ? <span className="spinner" /> : '➤'}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PERSONNEL DASHBOARD
 // ═══════════════════════════════════════════════════════════════════════════
 export function PersonnelDashboard() {
   const { user } = useAuth()
+  const isMedecin = user?.role === 'MEDECIN'
   const [view, setView] = useState('liste')
   const [patients, setPatients] = useState([])
   const [search, setSearch] = useState('')
@@ -890,6 +1194,29 @@ export function PersonnelDashboard() {
           )}
         </div>
         {error && <div className="alert alert-error">⚠️ {error}</div>}
+
+        {/* Navigation tabs */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 24, flexWrap: 'wrap' }}>
+          {[
+            { key: 'liste', label: '👥 Patients' },
+            ...(isMedecin ? [{ key: 'messagerie', label: '💬 Messagerie' }] : []),
+          ].map(t => (
+            <button key={t.key} onClick={() => { setView(t.key); setSelectedPatient(null) }}
+              style={{ padding: '8px 18px', border: 'none', borderRadius: 20, cursor: 'pointer', fontSize: 13,
+                background: view === t.key ? '#2563eb' : '#f3f4f6',
+                color: view === t.key ? 'white' : '#374151',
+                fontWeight: view === t.key ? 700 : 400 }}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {view === 'messagerie' && isMedecin && (
+          <div>
+            <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 20, marginBottom: 16 }}>💬 Messagerie patients</h2>
+            <MedecinMessagerieSection />
+          </div>
+        )}
         {view === 'liste' && (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>

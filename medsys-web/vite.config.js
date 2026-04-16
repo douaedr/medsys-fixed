@@ -20,6 +20,12 @@ export default defineConfig({
         target: 'http://localhost:8081',
         changeOrigin: true,
       },
+      // WebSocket → ms-notify (8084)
+      '/ws': {
+        target: 'http://localhost:8084',
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 })
