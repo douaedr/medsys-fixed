@@ -246,6 +246,22 @@ public class AuthService {
         audit("PASSWORD_CHANGED", email, null, "Password changed");
     }
 
+    // ── Current User Info ─────────────────────────────────────────────────────
+    public Map<String, Object> getMeInfo(String email) {
+        UserAccount user = userRepo.findByEmail(email)
+                .orElseThrow(() -> new AuthException("Utilisateur non trouvé"));
+        Map<String, Object> info = new HashMap<>();
+        info.put("userId", user.getId());
+        info.put("email", user.getEmail());
+        info.put("nom", user.getNom());
+        info.put("prenom", user.getPrenom());
+        info.put("role", user.getRole().name());
+        info.put("patientId", user.getPatientId());
+        info.put("personnelId", user.getPersonnelId());
+        info.put("emailVerified", user.isEmailVerified());
+        return info;
+    }
+
     // ── Verify JWT Token ──────────────────────────────────────────────────────
     public Map<String, Object> verifyToken(String token) {
         Map<String, Object> result = new HashMap<>();

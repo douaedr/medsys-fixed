@@ -12,8 +12,10 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalDouble;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -86,12 +88,21 @@ public class StatsService {
                 .noShows(noShows)
                 .completionRate(Math.round(completionRate * 10.0) / 10.0)
                 .fillRate(Math.round(fillRate * 10.0) / 10.0)
-                .avgWaitDays(2.5) // TODO: compute from actual scheduling data
+                .avgWaitDays(computeAvgWaitDays(appointments))
                 .byDay(byDay)
                 .byDoctor(byDoctor)
                 .bySpecialite(bySpecialite)
                 .totalSlots(totalSlots)
                 .availableSlots(availableSlots)
                 .build();
+    }
+
+    private double computeAvgWaitDays(List<Appointment> appointments) {
+        OptionalDouble avg = appointments.stream()
+                .filter(a -> a.getCreatedAt() != null)
+                .mapToDouble(a -> ChronoUnit.SECONDS.between(a.getCreatedAt(), a.getDateHeure()) / 86400.0)
+                .filter(d -> d >= 0)
+                .average();
+        return Math.round(avg.orElse(0.0) * 10.0) / 10.0;
     }
 }

@@ -99,9 +99,7 @@ public class AuthController {
         if (authentication == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        return ResponseEntity.ok(Map.of(
-                "email", authentication.getName(),
-                "authorities", authentication.getAuthorities()));
+        return ResponseEntity.ok(authService.getMeInfo(authentication.getName()));
     }
 
     private String getClientIp(HttpServletRequest request) {
