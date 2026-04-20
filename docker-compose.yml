@@ -1,0 +1,204 @@
+version: '3.8'
+
+# ──────────────────────────────────────────────────────────────────────────────
+# MedSys — docker-compose.yml
+# Lance tout le projet avec : docker-compose up --build
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Base de données MySQL ──────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: medsys-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-}
+      MYSQL_ROOT_HOST: '%'
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── RabbitMQ ──────────────────────────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: medsys-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── ms-auth (port 8082) ───────────────────────────────────────────────────
+  ms-auth:
+    build:
+      context: ./ms-auth
+      dockerfile: Dockerfile
+    container_name: medsys-auth
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DB_AUTH_URL: jdbc:mysql://mysql:3306/ms_auth_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Africa/Casablanca
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-604800000}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      MS_PATIENT_URL: http://ms-patient:8081
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8082/actuator/health | grep UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+
+  # ── ms-patient-personnel (port 8081) ──────────────────────────────────────
+  ms-patient:
+    build:
+      context: ./ms-patient-personnel
+      dockerfile: Dockerfile
+    container_name: medsys-patient
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DB_PATIENT_URL: jdbc:mysql://mysql:3306/ms_patient_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Africa/Casablanca
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      MS_AUTH_URL: http://ms-auth:8082
+      MS_RDV_URL: http://ms-rdv:8083
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+      UPLOAD_DIR: /app/uploads/patients
+    ports:
+      - "8081:8081"
+    volumes:
+      - patient_uploads:/app/uploads/patients
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/actuator/health | grep UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+
+  # ── ms-rdv (port 8083) ────────────────────────────────────────────────────
+  ms-rdv:
+    build:
+      context: ./ms-rdv
+      dockerfile: Dockerfile
+    container_name: medsys-rdv
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      DB_RDV_URL: jdbc:mysql://mysql:3306/ms_rdv_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Africa/Casablanca
+      DB_USERNAME: ${DB_USERNAME:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      MS_PATIENT_URL: http://ms-patient:8081
+      MS_AUTH_URL: http://ms-auth:8082
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/actuator/health | grep UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+
+  # ── ms-notify (port 8084) ─────────────────────────────────────────────────
+  ms-notify:
+    build:
+      context: ./ms-notify
+      dockerfile: Dockerfile
+    container_name: medsys-notify
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      MAIL_USERNAME: ${SMTP_USERNAME:-}
+      MAIL_PASSWORD: ${SMTP_PASSWORD:-}
+      MS_RDV_URL: http://ms-rdv:8083
+      MS_AUTH_URL: http://ms-auth:8082
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+    ports:
+      - "8084:8084"
+
+  # ── api-gateway (port 8080) ───────────────────────────────────────────────
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: medsys-gateway
+    restart: unless-stopped
+    depends_on:
+      ms-auth:
+        condition: service_healthy
+      ms-patient:
+        condition: service_healthy
+      ms-rdv:
+        condition: service_healthy
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod}
+    ports:
+      - "8080:8080"
+
+  # ── Frontend Web React/Vite (port 5173) ───────────────────────────────────
+  medsys-web:
+    image: node:20-alpine
+    container_name: medsys-web
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host"
+    volumes:
+      - ./medsys-web:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE: http://localhost:8080
+    depends_on:
+      - ms-auth
+      - ms-patient
+      - ms-rdv
+
+volumes:
+  mysql_data:
+  patient_uploads:

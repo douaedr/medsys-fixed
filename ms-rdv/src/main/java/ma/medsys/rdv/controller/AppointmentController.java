@@ -22,6 +22,13 @@ public class AppointmentController {
 
     private final AppointmentService appointmentService;
 
+    @GetMapping
+    @PreAuthorize("hasAnyRole('DIRECTEUR','ADMIN')")
+    @Operation(summary = "List all appointments (directeur/admin view)")
+    public ResponseEntity<List<AppointmentResponse>> getAll() {
+        return ResponseEntity.ok(appointmentService.getAll());
+    }
+
     @PostMapping
     @PreAuthorize("hasAnyRole('PATIENT','MEDECIN','ADMIN')")
     @Operation(summary = "Create a new appointment")

@@ -32,7 +32,7 @@ public class RdvProxyService {
 
         try {
             String url = UriComponentsBuilder.fromHttpUrl(msRdvUrl)
-                    .path("/api/v1/rdv/patient/{patientId}")
+                    .path("/api/v1/rdv/appointments/patient/{patientId}")
                     .buildAndExpand(patientId)
                     .toUriString();
             ResponseEntity<List<RendezVousDTO>> response = restTemplate.exchange(
@@ -54,7 +54,7 @@ public class RdvProxyService {
     public List<RendezVousDTO> getAllRdv() {
         if (msRdvUrl == null || msRdvUrl.isBlank()) return List.of();
         try {
-            String url = msRdvUrl + "/api/v1/rdv";
+            String url = msRdvUrl + "/api/v1/rdv/appointments";
             ResponseEntity<List<RendezVousDTO>> response = restTemplate.exchange(
                 url, HttpMethod.GET, null, new ParameterizedTypeReference<>() {});
             return response.getBody() != null ? response.getBody() : List.of();
@@ -71,11 +71,12 @@ public class RdvProxyService {
         if (msRdvUrl == null || msRdvUrl.isBlank()) return false;
         try {
             String url = UriComponentsBuilder.fromHttpUrl(msRdvUrl)
-                    .path("/api/v1/rdv/{rdvId}/annuler")
-                    .queryParam("patientId", patientId)
+                    .path("/api/v1/rdv/appointments/{rdvId}/cancel")
+                    .queryParam("reason", "Annulé par le patient")
                     .buildAndExpand(rdvId)
                     .toUriString();
-            restTemplate.put(url, null);
+            // AppointmentController.cancel() est un PATCH
+            restTemplate.patchForObject(url, null, Void.class);
             return true;
         } catch (Exception e) {
             log.warn("Impossible d'annuler RDV {} via ms-rdv: {}", rdvId, e.getMessage());

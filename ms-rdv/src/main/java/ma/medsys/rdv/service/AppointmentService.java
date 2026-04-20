@@ -70,6 +70,12 @@ public class AppointmentService {
         return toResponse(appointment);
     }
 
+    public List<AppointmentResponse> getAll() {
+        return appointmentRepo.findAll().stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
     public AppointmentResponse getById(Long id) {
         return toResponse(findOrThrow(id));
     }

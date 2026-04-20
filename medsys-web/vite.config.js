@@ -15,6 +15,11 @@ export default defineConfig({
         target: 'http://localhost:8082',
         changeOrigin: true,
       },
+      // Rendez-vous (ms-rdv, port 8083) — doit précéder la règle générique /api/v1
+      '/api/v1/rdv': {
+        target: 'http://localhost:8083',
+        changeOrigin: true,
+      },
       // Toutes les autres routes /api/v1 → ms-patient-personnel (8081)
       '/api/v1': {
         target: 'http://localhost:8081',

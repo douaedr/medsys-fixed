@@ -45,15 +45,23 @@ public class RabbitMQConsumer {
     public void handleAppointmentCreated(Map<String, Object> event) {
         log.info("Received appointment.created event: {}", event);
         try {
-            Long patientId  = parseLong(event, "patientId");
-            Long medecinId  = parseLong(event, "medecinId");
-            String medecinNom   = stringOrDefault(event, "medecinNom", "le médecin");
+            Long patientId = parseLong(event, "patientId");
+            // ms-rdv publie "doctorId" ; on accepte aussi "medecinId" pour compatibilité
+            Long medecinId = event.containsKey("doctorId")
+                    ? parseLong(event, "doctorId") : parseLong(event, "medecinId");
+            // ms-rdv publie "doctorName" ; on accepte aussi "medecinNom"
+            String medecinNom = event.containsKey("doctorName")
+                    ? stringOrDefault(event, "doctorName", "le médecin")
+                    : stringOrDefault(event, "medecinNom", "le médecin");
             String patientNom   = stringOrDefault(event, "patientNom", "Patient");
-            String dateHeureStr = stringOrDefault(event, "dateHeure", "");
+            // ms-rdv publie "appointmentDate" ; on accepte aussi "dateHeure"
+            String dateHeureStr = event.containsKey("appointmentDate")
+                    ? stringOrDefault(event, "appointmentDate", "")
+                    : stringOrDefault(event, "dateHeure", "");
             String patientEmail = stringOrDefault(event, "patientEmail", "");
 
             if (dateHeureStr.isBlank()) {
-                log.error("appointment.created event missing dateHeure — skipping");
+                log.error("appointment.created event missing appointmentDate — skipping");
                 return;
             }
 
@@ -84,14 +92,19 @@ public class RabbitMQConsumer {
     public void handleAppointmentConfirmed(Map<String, Object> event) {
         log.info("Received appointment.confirmed event: {}", event);
         try {
-            Long patientId      = parseLong(event, "patientId");
-            Long medecinId      = parseLong(event, "medecinId");
-            String medecinNom   = stringOrDefault(event, "medecinNom", "le médecin");
-            String dateHeureStr = stringOrDefault(event, "dateHeure", "");
+            Long patientId = parseLong(event, "patientId");
+            Long medecinId = event.containsKey("doctorId")
+                    ? parseLong(event, "doctorId") : parseLong(event, "medecinId");
+            String medecinNom = event.containsKey("doctorName")
+                    ? stringOrDefault(event, "doctorName", "le médecin")
+                    : stringOrDefault(event, "medecinNom", "le médecin");
+            String dateHeureStr = event.containsKey("appointmentDate")
+                    ? stringOrDefault(event, "appointmentDate", "")
+                    : stringOrDefault(event, "dateHeure", "");
             String patientEmail = stringOrDefault(event, "patientEmail", "");
 
             if (dateHeureStr.isBlank()) {
-                log.error("appointment.confirmed event missing dateHeure — skipping");
+                log.error("appointment.confirmed event missing appointmentDate — skipping");
                 return;
             }
 
@@ -122,9 +135,13 @@ public class RabbitMQConsumer {
     public void handleAppointmentCancelled(Map<String, Object> event) {
         log.info("Received appointment.cancelled event: {}", event);
         try {
-            Long patientId    = parseLong(event, "patientId");
-            String medecinNom = stringOrDefault(event, "medecinNom", "le médecin");
-            String dateHeureStr = stringOrDefault(event, "dateHeure", "");
+            Long patientId = parseLong(event, "patientId");
+            String medecinNom = event.containsKey("doctorName")
+                    ? stringOrDefault(event, "doctorName", "le médecin")
+                    : stringOrDefault(event, "medecinNom", "le médecin");
+            String dateHeureStr = event.containsKey("appointmentDate")
+                    ? stringOrDefault(event, "appointmentDate", "")
+                    : stringOrDefault(event, "dateHeure", "");
 
             if (!dateHeureStr.isBlank()) {
                 LocalDateTime dt = LocalDateTime.parse(dateHeureStr);
