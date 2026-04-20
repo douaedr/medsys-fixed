@@ -157,13 +157,26 @@ public class AppointmentService {
 
     private void publishEvent(String queue, String routingKey, Appointment apt) {
         try {
-            Map<String, Object> payload = Map.of(
-                    "appointmentId", apt.getId(),
-                    "patientId", apt.getPatientId(),
-                    "medecinId", apt.getMedecinId(),
-                    "dateHeure", apt.getDateHeure().toString(),
-                    "status", apt.getStatus().name()
-            );
+            String eventType = switch (routingKey) {
+                case "appointment.created"   -> "APPOINTMENT_CREATED";
+                case "appointment.confirmed" -> "APPOINTMENT_CONFIRMED";
+                case "appointment.cancelled" -> "APPOINTMENT_CANCELLED";
+                case "appointment.noshow"    -> "APPOINTMENT_NOSHOW";
+                default                      -> routingKey.toUpperCase().replace('.', '_');
+            };
+            String doctorName = (apt.getMedecinNom() != null ? apt.getMedecinNom() : "")
+                    + (apt.getMedecinPrenom() != null ? " " + apt.getMedecinPrenom() : "");
+            Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("eventType",       eventType);
+            payload.put("appointmentId",   apt.getId());
+            payload.put("patientId",       apt.getPatientId());
+            payload.put("doctorId",        apt.getMedecinId());
+            payload.put("doctorName",      doctorName.isBlank() ? "Médecin" : doctorName.trim());
+            payload.put("specialty",       apt.getSpecialiteId() != null ? apt.getSpecialiteId().toString() : null);
+            payload.put("appointmentDate", apt.getDateHeure() != null ? apt.getDateHeure().toString() : null);
+            payload.put("notes",           apt.getNotes());
+            payload.put("status",          apt.getStatus().name());
+            payload.put("timestamp",       java.time.LocalDateTime.now().toString());
             rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, routingKey, payload);
         } catch (Exception ex) {
             log.warn("Failed to publish RabbitMQ event '{}': {}", routingKey, ex.getMessage());

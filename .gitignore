@@ -6,13 +6,19 @@
 # Répertoire d'uploads patients
 uploads/
 
-# Java / Maven
+# Java / Maven — tous les dossiers target/ imbriqués
 target/
+**/target/
 *.class
 *.jar
 *.war
 *.ear
 .mvn/wrapper/maven-wrapper.jar
+
+# .NET
+**/bin/
+**/obj/
+*.user
 
 # IntelliJ IDEA
 .idea/
@@ -25,8 +31,10 @@ target/
 
 # Node.js / npm
 node_modules/
+**/node_modules/
 dist/
 .cache/
+.next/
 
 # Logs
 *.log
