@@ -13,13 +13,15 @@ public class RabbitMQConfig {
 
     // ── Exchanges ─────────────────────────────────────────────────────────────
     public static final String PATIENT_EXCHANGE     = "patient.exchange";
-    public static final String APPOINTMENT_EXCHANGE = "appointment.exchange";
+    /** Exchange partagé avec ms-rdv et ms-notify pour les événements RDV */
+    public static final String MEDSYS_EXCHANGE      = "medsys.exchange";
 
     // ── Queues ────────────────────────────────────────────────────────────────
-    public static final String PATIENT_QUEUE             = "patient.queue";
+    /** Queue dédiée ms-patient pour recevoir les événements appointment de ms-rdv */
+    public static final String PATIENT_QUEUE             = "patient.appointment.queue";
     public static final String PATIENT_NOTIFICATION_QUEUE = "patient.notification.queue";
 
-    // ── Routing keys (inbound) ────────────────────────────────────────────────
+    // ── Routing keys (inbound depuis ms-rdv via medsys.exchange) ─────────────
     public static final String ROUTING_APPOINTMENT_CREATED   = "appointment.created";
     public static final String ROUTING_APPOINTMENT_CANCELLED = "appointment.cancelled";
 
@@ -34,8 +36,8 @@ public class RabbitMQConfig {
     }
 
     @Bean
-    public TopicExchange appointmentExchange() {
-        return ExchangeBuilder.topicExchange(APPOINTMENT_EXCHANGE).durable(true).build();
+    public TopicExchange medsysExchange() {
+        return ExchangeBuilder.topicExchange(MEDSYS_EXCHANGE).durable(true).build();
     }
 
     // ── Queues ────────────────────────────────────────────────────────────────
@@ -52,17 +54,17 @@ public class RabbitMQConfig {
     // ── Bindings ──────────────────────────────────────────────────────────────
     @Bean
     public Binding appointmentCreatedBinding(Queue patientQueue,
-                                              TopicExchange appointmentExchange) {
+                                              TopicExchange medsysExchange) {
         return BindingBuilder.bind(patientQueue)
-                .to(appointmentExchange)
+                .to(medsysExchange)
                 .with(ROUTING_APPOINTMENT_CREATED);
     }
 
     @Bean
     public Binding appointmentCancelledBinding(Queue patientQueue,
-                                                TopicExchange appointmentExchange) {
+                                                TopicExchange medsysExchange) {
         return BindingBuilder.bind(patientQueue)
-                .to(appointmentExchange)
+                .to(medsysExchange)
                 .with(ROUTING_APPOINTMENT_CANCELLED);
     }
 

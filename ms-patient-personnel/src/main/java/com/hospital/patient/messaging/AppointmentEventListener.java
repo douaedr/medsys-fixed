@@ -9,6 +9,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -19,65 +20,91 @@ public class AppointmentEventListener {
     private final NotificationPublisher notificationPublisher;
 
     @RabbitListener(queues = RabbitMQConfig.PATIENT_QUEUE)
-    public void handleAppointmentEvent(AppointmentEvent event) {
-        if (event == null || event.getEventType() == null) {
-            log.warn("[RabbitMQ] Received null or invalid appointment event");
+    public void handleAppointmentEvent(Map<String, Object> payload) {
+        if (payload == null || !payload.containsKey("eventType")) {
+            log.warn("[RabbitMQ] Received null or invalid appointment event payload");
             return;
         }
 
-        log.info("[RabbitMQ] Received event: type={} appointmentId={} patientId={}",
-                event.getEventType(), event.getAppointmentId(), event.getPatientId());
+        String eventType    = getString(payload, "eventType");
+        Long appointmentId  = getLong(payload, "appointmentId");
+        Long patientId      = getLong(payload, "patientId");
+        Long doctorId       = getLong(payload, "doctorId");
+        String doctorName   = getString(payload, "doctorName");
+        String specialty    = getString(payload, "specialty");
+        String dateStr      = getString(payload, "appointmentDate");
+        String notes        = getString(payload, "notes");
 
-        switch (event.getEventType()) {
-            case "APPOINTMENT_CREATED"   -> handleCreated(event);
-            case "APPOINTMENT_CANCELLED" -> handleCancelled(event);
-            default -> log.warn("[RabbitMQ] Unknown appointment event type: {}", event.getEventType());
+        LocalDateTime appointmentDate = null;
+        if (dateStr != null) {
+            try { appointmentDate = LocalDateTime.parse(dateStr); } catch (Exception ignored) {}
+        }
+
+        log.info("[RabbitMQ] Received event: type={} appointmentId={} patientId={}",
+                eventType, appointmentId, patientId);
+
+        switch (eventType != null ? eventType : "") {
+            case "APPOINTMENT_CREATED"   -> handleCreated(appointmentId, patientId, doctorId,
+                                                doctorName, specialty, appointmentDate, notes);
+            case "APPOINTMENT_CANCELLED" -> handleCancelled(appointmentId, patientId);
+            default -> log.warn("[RabbitMQ] Unknown appointment event type: {}", eventType);
         }
     }
 
-    private void handleCreated(AppointmentEvent event) {
-        // Upsert the local appointment record
+    private void handleCreated(Long appointmentId, Long patientId, Long doctorId,
+                                String doctorName, String specialty,
+                                LocalDateTime appointmentDate, String notes) {
         AppointmentRecord record = appointmentRepo
-                .findByExternalAppointmentId(event.getAppointmentId())
+                .findByExternalAppointmentId(appointmentId)
                 .orElse(AppointmentRecord.builder()
-                        .externalAppointmentId(event.getAppointmentId())
+                        .externalAppointmentId(appointmentId)
                         .build());
 
-        record.setPatientId(event.getPatientId());
-        record.setDoctorId(event.getDoctorId());
-        record.setDoctorName(event.getDoctorName());
-        record.setSpecialty(event.getSpecialty());
-        record.setAppointmentDate(event.getAppointmentDate());
+        record.setPatientId(patientId);
+        record.setDoctorId(doctorId);
+        record.setDoctorName(doctorName);
+        record.setSpecialty(specialty);
+        record.setAppointmentDate(appointmentDate);
         record.setStatus("SCHEDULED");
-        record.setNotes(event.getNotes());
+        record.setNotes(notes);
         record.setUpdatedAt(LocalDateTime.now());
 
         appointmentRepo.save(record);
 
-        // Trigger patient notification
         notificationPublisher.publishPatientNotification(
-                event.getPatientId(),
+                patientId,
                 "Rendez-vous confirme",
-                "Votre rendez-vous avec " + event.getDoctorName()
-                        + " est confirme pour le " + event.getAppointmentDate(),
-                event.getAppointmentId()
+                "Votre rendez-vous avec " + doctorName + " est confirme pour le " + appointmentDate,
+                appointmentId
         );
     }
 
-    private void handleCancelled(AppointmentEvent event) {
-        appointmentRepo.findByExternalAppointmentId(event.getAppointmentId())
+    private void handleCancelled(Long appointmentId, Long patientId) {
+        appointmentRepo.findByExternalAppointmentId(appointmentId)
                 .ifPresent(record -> {
                     record.setStatus("CANCELLED");
                     record.setUpdatedAt(LocalDateTime.now());
                     appointmentRepo.save(record);
 
                     notificationPublisher.publishPatientNotification(
-                            event.getPatientId(),
+                            patientId,
                             "Rendez-vous annule",
                             "Votre rendez-vous avec " + record.getDoctorName()
                                     + " du " + record.getAppointmentDate() + " a ete annule.",
-                            event.getAppointmentId()
+                            appointmentId
                     );
                 });
+    }
+
+    private String getString(Map<String, Object> map, String key) {
+        Object val = map.get(key);
+        return val != null ? val.toString() : null;
+    }
+
+    private Long getLong(Map<String, Object> map, String key) {
+        Object val = map.get(key);
+        if (val == null) return null;
+        if (val instanceof Number n) return n.longValue();
+        try { return Long.parseLong(val.toString()); } catch (Exception e) { return null; }
     }
 }
