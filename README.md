@@ -1,76 +1,130 @@
-# MedSys — Système de Gestion Hospitalière
+# MedSys — Système de Gestion Médicale
+
+Architecture microservices complète pour la gestion hospitalière.
 
 ## Architecture
 
-```
-ms-auth             (port 8082) → Authentification JWT (login, register, mot de passe oublié)
-ms-patient-personnel (port 8081) → CRUD patients + dossiers médicaux
-medsys-web          (port 5173) → Frontend web (personnel + patients)
-medsys-mobile       (Expo)      → App mobile patients
+| Service | Port | Description |
+|---------|------|-------------|
+| gateway | 8080 | Spring Cloud Gateway (point d'entrée unique) |
+| auth-service | 8081 | Authentification JWT, gestion comptes |
+| patient-service | 8082 | Dossiers patients, statistiques |
+| medical-record-service | 8083 | Consultations, ordonnances, documents |
+| appointment-service | 8084 | Rendez-vous, créneaux, liste d'attente |
+| billing-service | 8085 | Facturation, paiements |
+| notification-service | 8086 | Emails, notifications (RabbitMQ consumer) |
+| frontend | 5173 (dev) / 80 (prod) | React 18 + Vite |
+
+## Prérequis
+
+- Docker 24+ et Docker Compose v2
+- Java 21 + Maven 3.9 (pour le développement local)
+- Node.js 20+ (pour le développement frontend local)
+
+## Démarrage rapide
+
+```bash
+# 1. Copier la configuration
+cp .env.example .env
+# Éditer .env selon votre environnement
+
+# 2. Lancer tous les services
+docker compose up -d
+
+# 3. Vérifier l'état
+docker compose ps
+docker compose logs -f gateway
 ```
 
-## 🚀 Lancement
+La première fois, le démarrage prend ~2 minutes (MySQL + RabbitMQ doivent être prêts avant les services Java).
 
-### 1. Backend — ms-patient-personnel (port 8081)
-```
-Ouvrir ms-patient-personnel dans IntelliJ → ▶️
-```
-- Base de données : MySQL XAMPP port 3307
-- Swagger : http://localhost:8081/swagger-ui.html
+## Comptes par défaut
 
-### 2. Backend — ms-auth (port 8082)
-```
-Ouvrir ms-auth dans IntelliJ → ▶️
-```
-- Base de données : ms_auth_db (créée automatiquement)
-- Swagger : http://localhost:8082/swagger-ui.html
+| Email | Mot de passe | Rôle |
+|-------|-------------|------|
+| admin@medsys.ma | Admin@2026 | ADMIN |
+| directeur@medsys.ma | Directeur@2026 | DIRECTEUR |
 
-### 3. Frontend Web (port 5173)
+## Accès
+
+- **Application** : http://localhost:8080 (via gateway) ou http://localhost:5173 (Vite dev)
+- **Swagger auth-service** : http://localhost:8081/swagger-ui.html
+- **Swagger patient-service** : http://localhost:8082/swagger-ui.html
+- **Swagger appointment-service** : http://localhost:8084/swagger-ui.html
+- **RabbitMQ Management** : http://localhost:15672 (guest/guest)
+
+## Développement local
+
+### Backend (un service à la fois)
+
+```bash
+# Démarrer uniquement les dépendances
+docker compose up -d mysql rabbitmq
+
+# Lancer un service en local
+cd auth-service
+mvn spring-boot:run
 ```
-cd medsys-web
+
+### Frontend
+
+```bash
+cd frontend
 npm install
 npm run dev
+# Proxy vers gateway:8080 configuré dans vite.config.js
 ```
-- Accueil : http://localhost:5173
-- Choisir Personnel ou Patient
 
-### 4. App Mobile
+## Variables d'environnement clés (.env)
+
+```env
+JWT_SECRET=<clé secrète partagée entre tous les services>
+MYSQL_ROOT_PASSWORD=rootpass
+MYSQL_PASSWORD=medsyspass
+MAIL_HOST=smtp.gmail.com
+MAIL_USERNAME=votre@gmail.com
+MAIL_PASSWORD=votre_app_password
 ```
-cd medsys-mobile
-npm install
-npx expo start
+
+## Structure des bases de données
+
+| Base | Service |
+|------|---------|
+| ms_auth_db | auth-service |
+| ms_patient_db | patient-service |
+| ms_medical_db | medical-record-service |
+| ms_rdv_db | appointment-service |
+| ms_billing_db | billing-service |
+
+Le script `scripts/init-databases.sql` crée automatiquement toutes les bases.
+
+## Rôles et permissions
+
+| Rôle | Accès |
+|------|-------|
+| PATIENT | Son dossier, ses RDV, ses factures, messagerie |
+| MEDECIN | Patients, dossiers médicaux, RDV, ordonnances |
+| SECRETAIRE | Patients, RDV (confirmation), facturation |
+| INFIRMIER | Lecture dossiers, consultations |
+| ADMIN | Gestion complète des comptes utilisateurs |
+| DIRECTEUR | Lecture seule + statistiques globales |
+
+## Communication asynchrone (RabbitMQ)
+
+Exchange: `medsys.exchange` (topic)
+
+| Routing key | Producteur | Consommateurs |
+|-------------|-----------|---------------|
+| appointment.created | appointment-service | — |
+| appointment.confirmed | appointment-service | notification-service, billing-service |
+| appointment.cancelled | appointment-service | notification-service |
+| appointment.noshow | appointment-service | — |
+| user.created | auth-service | notification-service |
+| user.logged_in | auth-service | — |
+
+## Arrêt
+
+```bash
+docker compose down          # Arrête les conteneurs (données conservées)
+docker compose down -v       # Arrête ET supprime les volumes (RESET complet)
 ```
-Scanner QR code avec Expo Go (Android/iOS)
-
-⚠️ Modifier src/api/api.js ligne 5-6 :
-Remplacer 192.168.1.100 par votre IP locale (cmd → ipconfig → Adresse IPv4)
-
-## 👤 Comptes
-
-### Créer un compte Admin (premier démarrage)
-Via Swagger http://localhost:8082/swagger-ui.html :
-POST /api/v1/auth/register-admin (à adapter selon besoin)
-Ou directement en base : INSERT INTO user_accounts (email, password, role, nom, prenom, enabled) 
-VALUES ('admin@hospital.ma', '$2a$10$...', 'ADMIN', 'Admin', 'System', 1)
-
-### Créer des médecins (par l'admin)
-POST /api/v1/admin/personnel
-{
-  "email": "dr.martin@hospital.ma",
-  "password": "motdepasse123",
-  "nom": "Martin",
-  "prenom": "Pierre",
-  "role": "MEDECIN"
-}
-
-### S'inscrire comme patient
-Via http://localhost:5173/patient → S'inscrire (formulaire multi-étapes 6 étapes)
-
-## 🔐 JWT
-- Token valide 24h
-- Secret configurable dans application.yml (jwt.secret)
-- Roles : PATIENT, MEDECIN, PERSONNEL, ADMIN
-
-## 📧 Email (mot de passe oublié)
-Configurer dans ms-auth/src/main/resources/application.yml :
-spring.mail.username et spring.mail.password (Google App Password)

@@ -1,0 +1,98 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:5173"
+              - "http://localhost:3000"
+            allowedMethods: [GET, POST, PUT, DELETE, PATCH, OPTIONS]
+            allowedHeaders: ["*"]
+            allowCredentials: true
+            maxAge: 3600
+
+      routes:
+        # ── Auth Service (public) ────────────────────────────────────────
+        - id: auth-public
+          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/auth/**
+          filters:
+            - name: LoggingFilter
+
+        # ── Auth Service (admin, protégé JWT) ────────────────────────────
+        - id: auth-admin
+          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/admin/**
+          filters:
+            - name: JwtAuthFilter
+            - name: LoggingFilter
+
+        # ── Patient Service ───────────────────────────────────────────────
+        - id: patient-service
+          uri: ${PATIENT_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/patients/**
+          filters:
+            - name: JwtAuthFilter
+            - name: LoggingFilter
+
+        # ── Medical Record Service ────────────────────────────────────────
+        - id: medical-record-service
+          uri: ${MEDICAL_RECORD_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/medical-records/**
+          filters:
+            - name: JwtAuthFilter
+            - name: LoggingFilter
+
+        # ── Appointment Service ───────────────────────────────────────────
+        - id: appointment-service
+          uri: ${APPOINTMENT_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/v1/appointments/**, /api/v1/time-slots/**, /api/v1/waiting-list/**
+          filters:
+            - name: JwtAuthFilter
+            - name: LoggingFilter
+
+        # ── Billing Service ───────────────────────────────────────────────
+        - id: billing-service
+          uri: ${BILLING_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/v1/billing/**
+          filters:
+            - name: JwtAuthFilter
+            - name: LoggingFilter
+
+        # ── Notification Service ──────────────────────────────────────────
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8086}
+          predicates:
+            - Path=/api/v1/notifications/**, /ws/**
+          filters:
+            - name: LoggingFilter
+
+jwt:
+  secret: ${JWT_SECRET:medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,routes,filters
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.medsys.gateway: DEBUG
+    org.springframework.cloud.gateway: INFO
