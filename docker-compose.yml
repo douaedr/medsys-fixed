@@ -1,0 +1,222 @@
+version: '3.9'
+
+services:
+  # ── Base de données ────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: medsys-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-medsys2026}
+      MYSQL_USER: ${DB_USERNAME:-medsys}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-medsys2026}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/init-databases.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-medsys2026}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: medsys-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Microservices ──────────────────────────────────────────────────────────
+  auth-service:
+    build: ./auth-service
+    container_name: medsys-auth
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/ms_auth_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+      DB_USERNAME: ${DB_USERNAME:-medsys}
+      DB_PASSWORD: ${DB_PASSWORD:-medsys2026}
+      JWT_SECRET: ${JWT_SECRET:-medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-900000}
+      JWT_REFRESH_EXPIRATION: ${JWT_REFRESH_EXPIRATION:-604800000}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      MS_PATIENT_URL: http://patient-service:8082
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  patient-service:
+    build: ./patient-service
+    container_name: medsys-patient
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/ms_patient_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+      DB_USERNAME: ${DB_USERNAME:-medsys}
+      DB_PASSWORD: ${DB_PASSWORD:-medsys2026}
+      JWT_SECRET: ${JWT_SECRET:-medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      MS_AUTH_URL: http://auth-service:8081
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  medical-record-service:
+    build: ./medical-record-service
+    container_name: medsys-medical-record
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/ms_medical_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+      DB_USERNAME: ${DB_USERNAME:-medsys}
+      DB_PASSWORD: ${DB_PASSWORD:-medsys2026}
+      JWT_SECRET: ${JWT_SECRET:-medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      MS_PATIENT_URL: http://patient-service:8082
+      UPLOAD_DIR: /app/uploads
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    volumes:
+      - medical_uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  appointment-service:
+    build: ./appointment-service
+    container_name: medsys-appointment
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/ms_rdv_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+      DB_USERNAME: ${DB_USERNAME:-medsys}
+      DB_PASSWORD: ${DB_PASSWORD:-medsys2026}
+      JWT_SECRET: ${JWT_SECRET:-medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      MS_PATIENT_URL: http://patient-service:8082
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  billing-service:
+    build: ./billing-service
+    container_name: medsys-billing
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/ms_billing_db?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+      DB_USERNAME: ${DB_USERNAME:-medsys}
+      DB_PASSWORD: ${DB_PASSWORD:-medsys2026}
+      JWT_SECRET: ${JWT_SECRET:-medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      MS_PATIENT_URL: http://patient-service:8082
+      MS_APPOINTMENT_URL: http://appointment-service:8084
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  notification-service:
+    build: ./notification-service
+    container_name: medsys-notification
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  api-gateway:
+    build: ./gateway
+    container_name: medsys-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod}
+      AUTH_SERVICE_URL: http://auth-service:8081
+      PATIENT_SERVICE_URL: http://patient-service:8082
+      MEDICAL_RECORD_SERVICE_URL: http://medical-record-service:8083
+      APPOINTMENT_SERVICE_URL: http://appointment-service:8084
+      BILLING_SERVICE_URL: http://billing-service:8085
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+    depends_on:
+      - auth-service
+      - patient-service
+      - medical-record-service
+      - appointment-service
+      - billing-service
+      - notification-service
+
+  frontend:
+    build: ./frontend
+    container_name: medsys-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - api-gateway
+
+volumes:
+  mysql_data:
+  medical_uploads:
