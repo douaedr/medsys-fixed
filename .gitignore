@@ -43,3 +43,12 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Added by repository cleanup
+.vs/
+*.suo
+bin/Debug/
+bin/Release/
+obj/
+!.env.example
+token.txt
