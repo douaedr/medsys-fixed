@@ -49,7 +49,7 @@ builder.Services.AddCors(options =>
 
 // ── JWT Bearer ────────────────────────────────────────────────────────────────
 var jwtSecret = builder.Configuration["Jwt:Secret"]
-    ?? "medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod";
+    ?? "DEVONLYCHANGEMEDEVONLYCHANGEMEDEVONLYCHANGEMEDEVONLYCHANGEMEDEVONLYCHANGEMEDEVONLYCHA";
 var jwtKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

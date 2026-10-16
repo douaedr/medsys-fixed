@@ -33,7 +33,7 @@ medsys-secret-key-hospital-management-2026-very-long-secret
 ```
 …alors que ms-auth utilise :
 ```
-medsys-hospital-jwt-secret-key-2026-very-long-and-secure-string-please-change-in-prod
+DEVONLYCHANGEMEDEVONLYCHANGEMEDEVONLYCHANGEMEDEVONLYCHANGEMEDEVONLYCHANGEMEDEVONLYCHA
 ```
 Si la propriété `jwt.secret` n'est pas trouvée dans application.yml, les deux services utilisent des secrets différents → les tokens générés par ms-auth seraient **rejetés** par ms-patient-personnel.
 
