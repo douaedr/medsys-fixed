@@ -52,3 +52,5 @@ bin/Release/
 obj/
 !.env.example
 token.txt
+
+.claude/

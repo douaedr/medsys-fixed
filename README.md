@@ -10,9 +10,11 @@ MedSys is a hospital management system built as an academic project (PFA) at EHE
 |---|---|---|
 | ms-auth (authentication) | Spring Boot | 8082 |
 | ms-patient-personnel (patients and personnel) | Spring Boot | 8081 |
-| appointment-service | Spring Boot | 8085 |
-| chatbot-service | Spring Boot | 8083 |
-| Web frontend | React + Vite | 5173 |
+| ms-rdv (appointments) | Spring Boot | 8083 |
+| ms-notify (notifications) | Spring Boot | 8084 |
+| ms-personnel (personnel API) | ASP.NET Core / MongoDB | - |
+| frontend (web app) | React + Vite | 5173 |
+| medsys-mobile (mobile app) | React Native / Expo | - |
 | Database | MySQL | 3307 |
 
 Access control: JWT-based role-based access control (RBAC).
