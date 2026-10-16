@@ -29,4 +29,4 @@ Team project supervised by Mr. Soufiane Dahmani.
 
 ## Configuration
 
-No secrets are stored in this repository. Copy `.env.example` to `.env` and fill in your own values (for example the API key used by the chatbot service).
+No secrets are stored in this repository. Copy `.env.example` to `.env` and fill in your own values.
