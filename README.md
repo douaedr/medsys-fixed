@@ -17,7 +17,6 @@ MedSys is a hospital management system built as an academic project (PFA) at EHE
 
 Access control: JWT-based role-based access control (RBAC).
 
-<!-- TO VERIFY: service names/ports match the current folders; mobile app (React Native / Expo) is in this repository -->
 
 ## Team and contributions
 
@@ -25,7 +24,6 @@ Team project supervised by Mr. Soufiane Dahmani.
 
 - **Douae Derouich** - main responsibility: Authentication service (`ms-auth`) and Patient service.
 - **Meryem Ammari, Ouissal Yahyaoui, Ibtihal Lakhsim** - teammates.
-<!-- TO VERIFY: add each teammate's exact contribution -->
 
 ## Configuration
 
